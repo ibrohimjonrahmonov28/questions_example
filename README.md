@@ -1,1 +1,1 @@
-**ALGORITM SAVOLLARI VA YECHIMLAR**
+                                        **ALGORITM SAVOLLARI VA YECHIMLAR**
