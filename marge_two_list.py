@@ -1,7 +1,7 @@
 from typing import Iterable
 
 def marge_list(arr1 : list[int], arr2 : list[int])->list[int]:
-    
+
 # "  
 #     1 ,3, 5, 7 , 15, 16
 #     ^ 
