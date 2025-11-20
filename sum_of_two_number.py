@@ -17,3 +17,5 @@ def add_number(son1 : int, son2 : int) -> int:
         raise Exception("type error")
     
 print(add_number(100,56))
+
+
