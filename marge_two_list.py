@@ -39,8 +39,7 @@ def marge_list(arr1 : list[int], arr2 : list[int])->list[int]:
 
 arr3 = [1,2,4,6,8]
 arr4 = [3,5,7,10,13,14]
-a= marge_list(arr3 ,arr4)
-print(a)
+print(marge_list(arr3 ,arr4))
 
 
 ## agarda xotiradan qoshimcha result uchun joy soralmasa unda quyidagicha boladi 
@@ -72,5 +71,4 @@ def marge_list(arr1 : list[int], arr2 : list[int])->Iterable[int]:
 
 arr3 = [1,2,4,6,8]
 arr4 = [3,5,7,10,13,14]
-marge_list(arr3 ,arr4)
-print(list(marge_list(arr1=arr3 ,arr2=arr4)))
+print(list(marge_list(arr3 ,arr4)))
