@@ -968,6 +968,8 @@ Requirements:
     if (!saved) return;
     unlockSynth();
     state = Object.assign(fresh(), saved);
+    // An exam saved by an older version carries the old examiner rules; swap in the current ones.
+    if (state.messages[0] && state.messages[0].role === "user") { state.messages[0] = { role: "user", content: briefing() }; persist(); }
     showExam();
     if (state.finished) { finishExam(); return; }
     const last = state.messages[state.messages.length - 1];
