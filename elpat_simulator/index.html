@@ -197,7 +197,9 @@ button { cursor: pointer; }
         <div class="row">
           <button class="btn" id="start" disabled>Start exam</button>
           <button class="btn ghost" id="resume" hidden>Resume last exam</button>
+          <button class="btn ghost" id="check">Sound check</button>
         </div>
+        <ul class="parts" id="check-out" hidden aria-live="polite"></ul>
         <p class="note" id="mic-note">Starting the exam turns on the microphone. It stays on until the report; only what you say during the red <b>SPEAK NOW</b> window is recorded.</p>
         <div class="warn" id="unavailable" hidden>The examiner needs Claude. Open this page on claude.ai while signed in to your Claude account.</div>
         <div class="warn" id="no-voice" hidden>Voice answers are not available in this view. Open the link in Chrome (Android or computer) to answer by voice. You can still take the exam by typing, with the same timer.</div>
@@ -314,6 +316,7 @@ End EVERY reply with tags on their own last line:
     phase: $("phase"), count: $("count"), bar: $("bar"), livebox: $("livebox"),
     tapSpeak: $("tap-speak"), done: $("done"), skipPrep: $("skip-prep"),
     save: $("save"), restart: $("restart"), confirmRestart: $("confirm-restart"),
+    check: $("check"), checkOut: $("check-out"),
   };
 
   const fresh = () => ({ role: null, unit: "", prep: 5, pace: 1, messages: [], part: null, startedAt: null, finished: false });
@@ -323,7 +326,7 @@ End EVERY reply with tags on their own last line:
   let controller = null, clockTimer = null, phaseTimer = null, runId = 0;
 
   // Microphone: started once from a click, kept open; words count only while `capturing`.
-  let micLive = false, capturing = false, buf = "", partial = "", firstWordAt = 0, lastWordAt = 0;
+  let micStatus = "off", micLive = false, capturing = false, buf = "", partial = "", firstWordAt = 0, lastWordAt = 0;
 
   // ---------- storage (per-viewer convenience only) ----------
   const load = () => { try { return JSON.parse(localStorage.getItem(STORE_KEY) || "null"); } catch { return null; } };
@@ -450,8 +453,10 @@ End EVERY reply with tags on their own last line:
       const now = Date.now(); if (!firstWordAt) firstWordAt = now; lastWordAt = now;
       renderLive();
     });
-    dictation.onState(({ state: st }) => {
+    dictation.onState(({ state: st, reason }) => {
       micLive = st === "listening" || st === "starting";
+      if (st === "listening") micStatus = "listening";
+      else if (st === "idle" && reason && reason !== "stopped") micStatus = reason;
       setMicChip();
       if (!micLive && capturing && dictation) els.tapSpeak.hidden = false;
       if (micLive) els.tapSpeak.hidden = true;
@@ -460,9 +465,10 @@ End EVERY reply with tags on their own last line:
 
   // Must run synchronously inside a click handler.
   function micOnFromGesture() {
-    if (!dictation || micLive) return;
-    dictation.start({ language: "en" }).catch((e) => {
-      if (e && (e.code === "not_granted" || e.code === "unavailable")) { dictation = null; els.tapSpeak.hidden = true; if (capturing) els.form.hidden = false; }
+    if (!dictation || micLive) return Promise.resolve();
+    return dictation.start().then(() => { micStatus = "listening"; }).catch((e) => {
+      micStatus = (e && e.code) || "upstream_error";
+      if (micStatus === "not_granted" || micStatus === "unavailable") { dictation = null; els.tapSpeak.hidden = true; if (capturing) els.form.hidden = false; }
     });
   }
 
@@ -485,41 +491,110 @@ End EVERY reply with tags on their own last line:
     return out;
   };
 
+  // Resolves true if speech actually played, false if the browser refused or stayed silent.
   function sayBrowser(text, id) {
     return new Promise((resolve) => {
       const parts = chunk(text, 220);
-      let i = 0;
+      let i = 0, played = false;
       try { synth.cancel(); } catch {}
       const next = () => {
-        if (i >= parts.length || id !== runId) return resolve();
+        if (i >= parts.length || id !== runId) return resolve(played);
         const piece = parts[i++];
         const u = new SpeechSynthesisUtterance(piece);
         if (voice) { u.voice = voice; u.lang = voice.lang; } else u.lang = "en-GB";
         u.rate = 0.97;
         let fin = false;
-        const done = () => { if (fin) return; fin = true; clearTimeout(t); next(); };
-        const t = setTimeout(done, 3000 + piece.length * 95);
-        u.onend = done; u.onerror = done;
-        synth.speak(u);
+        const t0 = Date.now();
+        const done = (ok) => {
+          if (fin) return; fin = true; clearTimeout(t); clearTimeout(noStart);
+          if (ok) played = true;
+          if (!played) { try { synth.cancel(); } catch {} return resolve(false); }
+          next();
+        };
+        const t = setTimeout(() => done(played), 3000 + piece.length * 95);
+        const noStart = setTimeout(() => { if (!played) done(false); }, 3000);
+        u.onstart = () => { played = true; clearTimeout(noStart); };
+        u.onend = () => done(played || Date.now() - t0 > 400);
+        u.onerror = (e) => done(played && e.error === "interrupted");
+        try { synth.speak(u); } catch { done(false); }
       };
       next();
     });
   }
 
+  // Returns "browser" | "claude" | false. Browser voice first (works beside the open mic); Claude's voice
+  // needs the mic closed, so after it the candidate taps once to answer.
+  let browserVoiceBroken = false;
   async function say(text, id) {
     const t = spoken(text);
-    if (!t) return;
-    if (synth) {
-      // Android loads voices late; wait briefly so the first question gets an English voice.
+    if (!t) return "browser";
+    if (synth && !browserVoiceBroken) {
       for (let i = 0; i < 15 && !voice && !synth.getVoices().length; i++) await sleep(100);
       if (!voice) pickVoice();
-      return sayBrowser(t, id);
+      if (await sayBrowser(t, id)) return "browser";
+      if (id !== runId) return false;
+      browserVoiceBroken = true;
     }
     if (tts) {
       if (micLive && dictation) await dictation.stop().catch(() => {});
-      await tts.speak(chunk(t, 1800).slice(0, 100).map((x) => ({ text: x })), { language: "en" }).catch(() => {});
+      try { await tts.speak(chunk(t, 1800).slice(0, 100).map((x) => ({ text: x })), { language: "en" }); return "claude"; }
+      catch (e) { if (e && e.code === "stopped") return "claude"; }
     }
+    return false;
   }
+
+  let voiceWarned = false;
+  function showVoiceWarning() {
+    if (voiceWarned) return; voiceWarned = true;
+    const w = document.createElement("div");
+    w.className = "warn";
+    w.textContent = "This app cannot read questions aloud, so read each question on screen. For the spoken exam, open the link in Chrome.";
+    els.log.appendChild(w); scrollDown();
+  }
+
+  // ---------- sound check ----------
+  const MIC_TEXT = {
+    listening: "working", unavailable: "not available in this app or browser", not_granted: "permission denied (allow the microphone for this page and for the browser)",
+    dismissed: "permission question was closed", no_gesture: "needs a tap", rate_limited: "busy, try again in a moment",
+    upstream_error: "failed to start", hidden: "stopped when the screen turned off", viewer_stopped: "stopped with the Stop button",
+  };
+  function checkLine(ok, label, detail) {
+    const li = document.createElement("li");
+    const b = document.createElement("b"); b.textContent = ok ? "OK" : "NO";
+    b.style.background = ok ? "var(--ok)" : "var(--danger)"; b.style.color = "#fff";
+    const sp = document.createElement("span"); sp.textContent = label + ": " + detail;
+    li.append(b, sp); return li;
+  }
+  els.check.addEventListener("click", () => {
+    const micP = dictation ? micOnFromGesture() : Promise.resolve();   // inside the click
+    unlockSynth();
+    els.check.disabled = true;
+    els.checkOut.hidden = false;
+    els.checkOut.innerHTML = "";
+    const heard = document.createElement("li"); heard.innerHTML = "<b>…</b><span>Say “Tower, Helicopter 215, ready for departure”.</span>";
+    (async () => {
+      els.checkOut.appendChild(checkLine(!!sample, "Claude examiner", sample ? "connected" : "not connected (sign in on claude.ai)"));
+      const vs = synth ? (synth.getVoices() || []).length : 0;
+      const playId = runId;
+      const played = synth ? await sayBrowser("Sound check. Tower, Helicopter two one five, ready for departure.", playId) : false;
+      els.checkOut.appendChild(checkLine(played, "Phone voice (reads questions)", played ? "working" : synth ? `silent (${vs} voices installed)` : "not supported in this app"));
+      els.checkOut.appendChild(checkLine(!!tts, "Claude voice (backup reader)", tts ? "available" : "not available in this app"));
+      await micP;
+      const micOk = !!dictation && micLive;
+      els.checkOut.appendChild(checkLine(micOk, "Microphone", dictation || micStatus !== "off" ? (MIC_TEXT[micStatus] || micStatus) : "not available in this app (use Chrome)"));
+      if (micOk) {
+        els.checkOut.appendChild(heard);
+        capturing = true; buf = ""; partial = "";
+        await sleep(6000);
+        capturing = false;
+        const got = (buf + " " + partial).trim();
+        heard.replaceWith(checkLine(!!got, "Speech to text", got ? `heard “${got}”` : "no words heard"));
+        buf = ""; partial = "";
+        if (dictation) await dictation.stop().catch(() => {});
+      }
+      els.check.disabled = false;
+    })();
+  });
 
   // ---------- exam loop ----------
   async function examinerTurn() {
@@ -570,8 +645,26 @@ End EVERY reply with tags on their own last line:
   async function runQuestion(text, id) {
     if (state.finished) { finishExam(); return; }
     setPhase("", "Examiner speaking", { count: "" });
-    await say(text, id);
+    const how = await say(text, id);
     if (id !== runId) return;
+    if (!how) {
+      showVoiceWarning();
+      const readSecs = Math.min(40, Math.max(5, words(spoken(text)) / 3.5));
+      const r0 = Date.now();
+      await new Promise((resolve) => {
+        skipPrep = resolve;
+        const step = () => {
+          if (id !== runId) return resolve();
+          const left = readSecs - (Date.now() - r0) / 1000;
+          if (left <= 0) return resolve();
+          setPhase("prep", "Read the question", { count: String(Math.ceil(left)), progress: 100 * (1 - left / readSecs), skip: true });
+          phaseTimer = setTimeout(step, 100);
+        };
+        step();
+      });
+      clearTimeout(phaseTimer); skipPrep = null;
+      if (id !== runId) return;
+    }
 
     // Thinking time
     const prep = state.prep;
@@ -600,6 +693,18 @@ End EVERY reply with tags on their own last line:
     const part = PARTS.find((p) => p.id === state.part) || PARTS[0];
     const asked = parseInt(lastMatch(TIME_RE, text) || "0", 10);
     const secs = Math.round(Math.min(150, Math.max(15, (asked || part.secs) * state.pace)));
+    if (dictation && !micLive) {
+      await new Promise((resolve) => {
+        const step = () => {
+          if (id !== runId || !dictation || micLive) return resolve();
+          setPhase("prep", micStatus === "off" || micStatus === "stopped" ? "Tap to answer" : "Microphone is off", { tap: true, count: "" });
+          phaseTimer = setTimeout(step, 200);
+        };
+        step();
+      });
+      clearTimeout(phaseTimer);
+      if (id !== runId) return;
+    }
     let typing = !dictation;
     buf = ""; partial = ""; firstWordAt = 0; lastWordAt = 0;
     els.answer.value = "";
