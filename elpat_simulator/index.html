@@ -3,7 +3,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-/* Layout: one-column cockpit chat. Taxiway-sign progress strip on top, examiner/candidate transcript, docked composer at the bottom. */
+/* Layout: one-column cockpit chat. Taxiway-sign progress strip on top, examiner/candidate transcript, docked "speaking deck" (phase, countdown, live transcript) at the bottom. */
 :root {
   --bg: #eef1f4;
   --surface: #ffffff;
@@ -16,6 +16,8 @@
   --sign-black: #111417;
   --sign-yellow: #f2c230;
   --rt: #8a5a12;
+  --live: #c62828;
+  --ok: #2e7d32;
   --danger: #b3261e;
   --font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
   --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -24,13 +26,13 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0d141b; --surface: #15202a; --surface-2: #1d2a36; --ink: #e3e9ef; --muted: #93a2b0;
-    --line: #2a3a48; --accent: #7fa8e0; --accent-ink: #0d141b; --rt: #e0b45c; --danger: #f2867f;
+    --line: #2a3a48; --accent: #7fa8e0; --accent-ink: #0d141b; --rt: #e0b45c; --live: #ff6b6b; --ok: #7bc47f; --danger: #f2867f;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0d141b; --surface: #15202a; --surface-2: #1d2a36; --ink: #e3e9ef; --muted: #93a2b0;
-  --line: #2a3a48; --accent: #7fa8e0; --accent-ink: #0d141b; --rt: #e0b45c; --danger: #f2867f;
+  --line: #2a3a48; --accent: #7fa8e0; --accent-ink: #0d141b; --rt: #e0b45c; --live: #ff6b6b; --ok: #7bc47f; --danger: #f2867f;
   color-scheme: dark;
 }
 html, body { height: 100%; }
@@ -48,7 +50,10 @@ button { cursor: pointer; }
 .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .brand { font-family: var(--font-display); font-weight: 700; font-size: 22px; letter-spacing: .04em; text-transform: uppercase; }
 .brand small { font-family: var(--font-mono); font-weight: 400; font-size: 11px; letter-spacing: .08em; color: #9aa6b2; margin-left: 8px; }
+.top-meta { display: flex; align-items: center; gap: 10px; }
 .clock { font-family: var(--font-mono); font-size: 13px; color: var(--sign-yellow); font-variant-numeric: tabular-nums; }
+.mic-chip { font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; padding: 2px 7px; border: 1px solid #56616c; color: #9aa6b2; border-radius: 3px; }
+.mic-chip.on { border-color: #ff6b6b; color: #ff6b6b; }
 .signs { display: flex; gap: 4px; margin-top: 8px; overflow-x: auto; scrollbar-width: none; }
 .signs::-webkit-scrollbar { display: none; }
 .sign { flex: 0 0 auto; font-family: var(--font-display); font-weight: 700; font-size: 14px; letter-spacing: .05em; text-transform: uppercase;
@@ -72,13 +77,16 @@ button { cursor: pointer; }
 .role[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .field { display: grid; gap: 6px; }
 .field input { border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 10px 12px; width: 100%; box-sizing: border-box; }
-.parts { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; counter-reset: p; }
+.timing { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.timing select { border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 9px 10px; width: 100%; }
+.parts { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
 .parts li { display: grid; grid-template-columns: 44px 1fr; gap: 10px; align-items: baseline; }
 .parts li b { font-family: var(--font-display); font-size: 15px; letter-spacing: .05em; text-transform: uppercase; background: var(--sign-yellow); color: var(--sign-black); text-align: center; padding: 1px 0; }
 .parts li span { font-size: 14px; }
 .btn { border: 0; border-radius: 6px; padding: 12px 18px; background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+.btn.live { background: var(--live); color: #fff; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .note { font-size: 13px; color: var(--muted); }
 .warn { border-left: 3px solid var(--danger); padding: 8px 12px; background: var(--surface); font-size: 14px; }
@@ -86,18 +94,21 @@ button { cursor: pointer; }
 /* Transcript */
 .log { display: grid; gap: 14px; }
 .msg { display: grid; gap: 4px; min-width: 0; }
-.who { font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.who { font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .bubble { min-width: 0; border-radius: 6px; padding: 12px 14px; overflow-wrap: anywhere; }
 .examiner .bubble { background: var(--surface); border: 1px solid var(--line); }
 .candidate { justify-items: end; }
 .candidate .bubble { background: var(--surface-2); max-width: 88%; white-space: pre-wrap; }
+.stats { font-family: var(--font-mono); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .bubble > :first-child { margin-top: 0; }
 .bubble > :last-child { margin-bottom: 0; }
 .bubble h1, .bubble h2, .bubble h3 { font-family: var(--font-display); letter-spacing: .02em; line-height: 1.15; margin: 14px 0 6px; text-wrap: balance; }
 .bubble h1 { font-size: 24px; } .bubble h2 { font-size: 21px; } .bubble h3 { font-size: 18px; }
 .bubble code { font-family: var(--font-mono); font-size: 13px; background: var(--surface-2); padding: 1px 4px; border-radius: 3px; }
-.bubble pre { font-family: var(--font-mono); font-size: 13px; background: var(--surface-2); padding: 10px 12px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; border-left: 3px solid var(--rt); }
+.bubble pre { font-family: var(--font-mono); font-size: 13px; background: var(--surface-2); padding: 10px 12px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; border-left: 3px solid var(--rt); margin: 6px 0 0; }
 .bubble pre code { background: none; padding: 0; }
+.bubble details { margin: 8px 0; }
+.bubble summary { font-family: var(--font-mono); font-size: 12px; letter-spacing: .06em; color: var(--rt); cursor: pointer; }
 .bubble blockquote { margin: 8px 0; padding: 6px 12px; border-left: 3px solid var(--rt); background: var(--surface-2); }
 .bubble table { border-collapse: collapse; font-size: 13px; width: 100%; }
 .bubble .tbl { overflow-x: auto; margin: 8px 0; }
@@ -107,27 +118,42 @@ button { cursor: pointer; }
 .icon-btn { border: 1px solid var(--line); background: transparent; border-radius: 4px; padding: 1px 7px; font-size: 11px; font-family: var(--font-mono); letter-spacing: .06em; color: var(--muted); }
 .typing { color: var(--muted); font-style: italic; }
 
-/* Composer */
-.composer { border-top: 1px solid var(--line); background: var(--surface);
-  padding-block: 10px calc(10px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-.composer form { display: flex; gap: 8px; align-items: flex-end; }
-.composer textarea { flex: 1; min-width: 0; resize: none; border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 10px 12px; max-height: 40vh; line-height: 1.4; }
-.mic { border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 10px 12px; font-family: var(--font-mono); font-size: 12px; }
-.mic.on { background: var(--danger); color: #fff; border-color: var(--danger); }
-.tools { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+/* Speaking deck */
+.deck { border-top: 1px solid var(--line); background: var(--surface); display: grid; gap: 10px;
+  padding-block: 12px calc(12px + env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.deck-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.phase { font-family: var(--font-display); font-weight: 700; font-size: 20px; letter-spacing: .06em; text-transform: uppercase; }
+.phase.speak { color: var(--live); }
+.phase.prep { color: var(--rt); }
+.count { font-family: var(--font-mono); font-size: 26px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.bar { height: 4px; background: var(--surface-2); border-radius: 2px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0%; background: var(--accent); }
+.deck.answering .bar i { background: var(--live); }
+.livebox { min-height: 44px; max-height: 22vh; overflow-y: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 14px; }
+.livebox .partial { color: var(--muted); }
+.livebox:empty::before { content: attr(data-empty); color: var(--muted); font-style: italic; }
+.deck form { display: flex; gap: 8px; align-items: flex-end; }
+.deck textarea { flex: 1; min-width: 0; resize: none; border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 10px 12px; max-height: 30vh; line-height: 1.4; }
+.tools { display: flex; gap: 8px; flex-wrap: wrap; }
 .tools .icon-btn { padding: 4px 9px; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--live); margin-right: 6px; vertical-align: 1px; }
 
 @media (prefers-reduced-motion: no-preference) {
   .msg { animation: in .18s ease-out both; }
   @keyframes in { from { transform: translateY(4px); opacity: .6; } to { transform: none; opacity: 1; } }
+  .phase.speak .dot { animation: blink 1s steps(2, start) infinite; }
+  @keyframes blink { to { visibility: hidden; } }
 }
 </style>
 
 <div class="app">
   <header class="top">
     <div class="top-row">
-      <div class="brand">ELPAT<small>ICAO LEVEL CHECK</small></div>
-      <div class="clock" id="clock">00:00</div>
+      <div class="brand">ELPAT<small>SPEAKING TEST</small></div>
+      <div class="top-meta">
+        <span class="mic-chip" id="mic-chip">MIC OFF</span>
+        <span class="clock" id="clock">00:00</span>
+      </div>
     </div>
     <nav class="signs" id="signs" aria-label="Exam progress"></nav>
   </header>
@@ -136,9 +162,9 @@ button { cursor: pointer; }
     <section class="brief" id="brief">
       <div>
         <div class="label">English Language Proficiency · Aviation</div>
-        <h1>Sit a full ELPAT with a live examiner</h1>
+        <h1>Speak your answers. The examiner is listening.</h1>
       </div>
-      <p>Four parts, one step at a time: introduction, pictures and discussion, listening, and a radiotelephony role-play. At the end you get an ICAO level estimate (1–6) and a report in Uzbek with your errors corrected.</p>
+      <p>The examiner reads every question aloud. You get a few seconds to get ready, then the microphone captures your answer until the time runs out. At the end you get an ICAO level estimate (1–6) based on your speaking, and a report in Uzbek with your errors corrected.</p>
 
       <div class="card">
         <div class="label">Your role</div>
@@ -150,11 +176,31 @@ button { cursor: pointer; }
           <span class="label">Aircraft type or ATC unit (optional)</span>
           <input id="unit" type="text" placeholder="e.g. H215, A320, Tashkent Approach" autocomplete="off">
         </label>
+        <div class="timing">
+          <label class="field">
+            <span class="label">Thinking time</span>
+            <select id="prep">
+              <option value="3">3 seconds</option>
+              <option value="5" selected>5 seconds</option>
+              <option value="10">10 seconds</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="label">Answer time</span>
+            <select id="pace">
+              <option value="0.75">Short</option>
+              <option value="1" selected>Exam standard</option>
+              <option value="1.5">Long</option>
+            </select>
+          </label>
+        </div>
         <div class="row">
           <button class="btn" id="start" disabled>Start exam</button>
           <button class="btn ghost" id="resume" hidden>Resume last exam</button>
         </div>
+        <p class="note" id="mic-note">Starting the exam turns on the microphone. It stays on until the report; only what you say during the red <b>SPEAK NOW</b> window is recorded.</p>
         <div class="warn" id="unavailable" hidden>The examiner needs Claude. Open this page on claude.ai while signed in to your Claude account.</div>
+        <div class="warn" id="no-voice" hidden>Voice answers are not available in this view. Open the link in Chrome (Android or computer) to answer by voice. You can still take the exam by typing, with the same timer.</div>
       </div>
 
       <div class="card">
@@ -162,22 +208,31 @@ button { cursor: pointer; }
         <ol class="parts">
           <li><b>P1</b><span>Introduction: your job, background and routine operations.</span></li>
           <li><b>P2</b><span>Pictures: describe a normal scene, compare an abnormal one, ask the examiner three questions, then discuss.</span></li>
-          <li><b>P3</b><span>Listening: an incident report and a radio exchange. Tap <em>LISTEN</em> to hear them read aloud where your browser supports it.</span></li>
+          <li><b>P3</b><span>Listening: an incident report and a radio exchange, read aloud once. The transcript stays folded.</span></li>
           <li><b>P4</b><span>RT role-play: routine calls, a developing abnormal situation, then an urgent safety conflict.</span></li>
         </ol>
-        <p class="note">Answer in English. The examiner will not correct you during the test. Use the microphone button to speak your answers where it is offered.</p>
+        <p class="note">Use headphones so the examiner's voice does not reach the microphone. To hear a question again, say “Say again” or “Could you repeat the question?” in your answer, as you would in the real exam.</p>
       </div>
     </section>
 
     <section class="log" id="log" hidden aria-live="polite"></section>
   </main>
 
-  <footer class="composer" id="composer" hidden>
-    <form id="form">
-      <button type="button" class="mic" id="mic" hidden aria-label="Dictate answer">MIC</button>
-      <textarea id="answer" rows="2" placeholder="Your answer in English…" aria-label="Your answer"></textarea>
-      <button class="btn" id="send" type="submit">Send</button>
+  <footer class="deck" id="deck" hidden>
+    <div class="deck-top">
+      <div class="phase" id="phase">Standby</div>
+      <div class="count" id="count"></div>
+    </div>
+    <div class="bar"><i id="bar"></i></div>
+    <div class="livebox" id="livebox" data-empty="Your words appear here while you speak."></div>
+    <form id="form" hidden>
+      <textarea id="answer" rows="2" placeholder="Type your answer…" aria-label="Your answer"></textarea>
     </form>
+    <div class="row">
+      <button type="button" class="btn live" id="tap-speak" hidden>Tap to turn the microphone on</button>
+      <button type="button" class="btn" id="done" hidden>Finish answer</button>
+      <button type="button" class="btn ghost" id="skip-prep" hidden>Start now</button>
+    </div>
     <div class="tools">
       <button type="button" class="icon-btn" id="save" hidden>SAVE REPORT</button>
       <button type="button" class="icon-btn" id="restart">NEW EXAM</button>
@@ -190,84 +245,122 @@ button { cursor: pointer; }
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
 <script>
 (() => {
-  const STORE_KEY = "elpat-sim-v1";
+  const STORE_KEY = "elpat-sim-v2";
   const PARTS = [
-    { id: "1",  label: "P1 Intro" },
-    { id: "2A", label: "P2A Pictures" },
-    { id: "2B", label: "P2B Discussion" },
-    { id: "3A", label: "P3A Report" },
-    { id: "3B", label: "P3B Radio" },
-    { id: "4",  label: "P4 RT" },
-    { id: "REPORT", label: "Report" },
+    { id: "1",  label: "P1 Intro",       secs: 40 },
+    { id: "2A", label: "P2A Pictures",   secs: 75 },
+    { id: "2B", label: "P2B Discussion", secs: 60 },
+    { id: "3A", label: "P3A Report",     secs: 60 },
+    { id: "3B", label: "P3B Radio",      secs: 60 },
+    { id: "4",  label: "P4 RT",          secs: 30 },
+    { id: "REPORT", label: "Report",     secs: 0 },
   ];
-  const TAG_RE = /<<\s*PART\s*=\s*([A-Z0-9]+)\s*>>/gi;
+  const PART_RE = /<<\s*PART\s*=\s*([A-Z0-9]+)\s*>>/gi;
+  const TIME_RE = /<<\s*TIME\s*=\s*(\d+)\s*>>/gi;
+  const ANY_TAG = /<<\s*(PART|TIME)\s*=\s*[A-Z0-9]+\s*>>/gi;
+  const SILENCE_MS = 6000;   // auto-finish after this much silence once the candidate has spoken
+  const GRACE_MS = 1400;     // let the last phrase settle after the window closes
 
   const EXAMINER = `# ROLE & OBJECTIVE
-You are an official, certified ELPAT (English Language Proficiency Aviation Test) Examiner and ICAO Aviation English Assessor. Conduct a realistic, interactive, step-by-step ELPAT exam simulation with the candidate, then give a comprehensive ICAO-standard assessment with error correction.
+You are an official, certified ELPAT (English Language Proficiency Aviation Test) Examiner and ICAO Aviation English Assessor. You conduct a realistic, interactive, step-by-step SPEAKING exam, then give a comprehensive ICAO-standard assessment with error correction.
+
+# HOW THIS EXAM RUNS
+- Everything you write is READ ALOUD to the candidate by a text-to-speech voice. Write the way an examiner speaks: short, natural sentences, no bullet lists, no headings, no emoji, minimal Markdown. Keep each reply under about 120 words, except the Part 3 recordings and the final report.
+- The candidate answers BY VOICE under time pressure: about 5 seconds to think, then a fixed speaking window. Their answers reach you as automatic speech-to-text transcripts, each preceded by a line in square brackets with measurements: window length, words, speaking rate (wpm), delay before the first word, and whether time ran out.
+- Speech-to-text drops most fillers and may mis-hear words. Treat an odd or wrong word that sounds like a plausible intended word as possible pronunciation trouble, and note it as such.
+- "[No response]" means the candidate stayed silent for the whole window. Move on as a real examiner would, and record it.
+- If the candidate asks you to repeat ("say again", "could you repeat"), repeat or rephrase the question.
 
 # RULES
-1. Conduct the exam strictly in English. Only the final report is in Uzbek (with English examples quoted from the candidate's answers).
-2. ONE STEP AT A TIME. Never give several tasks at once. Each reply contains exactly one prompt or task, then stop and wait.
-3. Adapt Parts 2, 3 and 4 to the candidate's role and aircraft/unit.
+1. Conduct the exam strictly in English. Only the final report is in Uzbek, quoting the candidate's English.
+2. ONE STEP AT A TIME. Each reply contains exactly one question or task. Then stop.
+3. Adapt Parts 2, 3 and 4 to the candidate's role and aircraft or unit.
 4. Be professional, neutral and encouraging. Do NOT correct mistakes during the exam; save all corrections for the final report.
-5. Text adaptation: Part 2 pictures are vivid, detailed scene descriptions (who, where, weather, equipment, positions). Part 3 audio is shown as a fenced code block headed [AUDIO RECORDING 1] or [RADIO EXCHANGE AUDIO 2]; the candidate may have it read aloud. Part 4 radio calls use ICAO phraseology in the form "[ATC]: ..." or "[PILOT]: ...".
-6. Keep replies concise, as a real examiner would speak. Use Markdown sparingly.
+5. Part 2 pictures: give a vivid spoken description of the scene (who, where, weather, equipment, positions) in 4–6 sentences.
+6. Part 3 recordings: put the recording in a fenced code block whose first line is [AUDIO RECORDING 1] or [RADIO EXCHANGE AUDIO 2]. It is played aloud once and the candidate cannot read it. Ask the question AFTER the block.
+7. Part 4 radio calls: ICAO phraseology, one transmission per reply, written as "[ATC]: ..." or "[PILOT]: ...".
 
 # WORKFLOW
 The candidate's role is already confirmed (given below). Start directly with Part 1.
 
-PART 1 – INTRODUCTION (3 questions, one per reply): (1) current role, daily duties, aviation background; (2) why aviation / most challenging part of the job; (3) a light future-oriented or routine operational question. Then thank them and announce Part 2.
+PART 1 – INTRODUCTION (3 questions, one per reply): (1) current role, daily duties, aviation background; (2) why aviation / most challenging part of the job; (3) a light future-oriented or routine operational question. Then thank them and announce Part 2 in the same reply as its first task.
 
-PART 2A – PICTURES: Task 1: Picture A, a standard situation; ask them to describe it. Task 2: Picture B, a related non-standard/abnormal situation; ask them to compare B with A (differences, hazards, risks). Task 3: tell them "Now, ask me 3 relevant operational or safety-related questions about Picture B." and answer their questions briefly in character.
-PART 2B – DISCUSSION: 2–3 broader questions (human factors, CRM/TRM, SOPs, weather, communication breakdown), one at a time, with brief follow-ups. Then announce Part 3.
+PART 2A – PICTURES: Task 1: Picture A, a standard situation; ask them to describe it. Task 2: Picture B, a related non-standard situation; ask them to compare B with A (differences, hazards, risks). Task 3: "Now, ask me 3 relevant operational or safety-related questions about Picture B." Answer their questions briefly in character.
+PART 2B – DISCUSSION: 2–3 broader questions (human factors, CRM, SOPs, weather, communication breakdown), one at a time, with brief follow-ups.
 
-PART 3A – Present a 120–150 word narrative incident report as [AUDIO RECORDING 1]. Ask the candidate to summarise the key facts, identify the main problem, and answer 2 detail questions.
-PART 3B – Present a multi-turn Pilot/ATC radio exchange about an abnormal or emergency situation as [RADIO EXCHANGE AUDIO 2]. Ask: (1) the exact nature of the situation; (2) the intentions/requests stated and the instructions given. Then announce Part 4.
+PART 3A – A 120–150 word narrative incident report as [AUDIO RECORDING 1]. Ask the candidate to summarise the key facts, identify the main problem, and answer 2 detail questions (ask the detail questions in the next reply).
+PART 3B – A multi-turn Pilot/ATC radio exchange about an abnormal or emergency situation as [RADIO EXCHANGE AUDIO 2]. Ask: the exact nature of the situation, then the intentions/requests stated and instructions given.
 
-PART 4 – RT ROLE-PLAY: Brief the scenario (callsign, position/level, weather, airport/sector). You play the opposite role. Phase 1: 2–3 routine exchanges. Phase 2: an escalating abnormal situation, 3–4 turns, requiring ICAO phraseology plus plain English. Phase 3: an urgent safety conflict, 2–3 turns. End with: "This concludes Part 4 and the ELPAT test. Please stand by for your evaluation." and in the SAME reply deliver the final report.
+PART 4 – RT ROLE-PLAY: Brief the scenario (callsign, position/level, weather, airport/sector) and make the first call. You play the opposite role. Phase 1: 2–3 routine exchanges. Phase 2: an escalating abnormal situation, 3–4 turns. Phase 3: an urgent safety conflict, 2–3 turns. Then say "This concludes Part 4 and the ELPAT test. Please stand by for your evaluation." and in the SAME reply deliver the final report.
 
-FINAL REPORT (in Uzbek, Markdown):
-1. Umumiy taxminiy ICAO darajasi (1–6) and a table of the 6 criteria: Pronunciation (judged from written clarity/spelling unless voice was used), Structure, Vocabulary, Fluency, Comprehension, Interactions (incl. RT phraseology). The overall level is the LOWEST criterion, per ICAO rules.
-2. 1-qismdan 4-qismgacha tahlil: what went well and what was missed in each part.
-3. Xatolar tahlili: a table with columns ❌ Nomzod varianti | ✅ To'g'ri variant (Aviation English / ICAO) | 💡 Izoh (Uzbek). Quote the candidate's exact words.
-4. Tavsiyalar: specific practice actions before the real exam.
+FINAL REPORT (in Uzbek, Markdown allowed here). The report is about SPEAKING:
+1. Umumiy taxminiy ICAO darajasi (1–6) and a table of the 6 criteria with a level and a one-line reason each: Pronunciation (from speech-to-text evidence), Structure, Vocabulary, Fluency (use the wpm, first-word delays, timeouts and silences), Comprehension, Interactions (including RT phraseology and readbacks). The overall level is the LOWEST criterion, per ICAO rules.
+2. Nutq ko'rsatkichlari: average wpm, average delay before speaking, number of silent or cut-off answers.
+3. 1-qismdan 4-qismgacha tahlil: what went well and what was missed in each part.
+4. Xatolar tahlili: a table with columns ❌ Nomzod varianti | ✅ To'g'ri variant (Aviation English / ICAO) | 💡 Izoh. Quote the candidate's exact words.
+5. Tavsiyalar: specific speaking practice before the real exam.
 
-# STATUS TAG (MANDATORY)
-End EVERY reply with one line containing only the tag for the part the reply belongs to: <<PART=1>>, <<PART=2A>>, <<PART=2B>>, <<PART=3A>>, <<PART=3B>>, <<PART=4>>, or <<PART=REPORT>> for the reply that contains the final report. The candidate does not see this tag.`;
+# TAGS (MANDATORY, NEVER READ ALOUD)
+End EVERY reply with tags on their own last line:
+- <<PART=X>> where X is 1, 2A, 2B, 3A, 3B, 4, or REPORT for the reply containing the final report.
+- <<TIME=N>> the speaking window in seconds that fits your question: 30–45 for Part 1 and short follow-ups, 60–90 for picture description and comparison, 45–60 for asking the 3 questions, 45–75 for Part 3 answers, 20–40 for one RT transmission. Omit TIME on the report.`;
 
   const $ = (id) => document.getElementById(id);
   const els = {
-    brief: $("brief"), log: $("log"), composer: $("composer"), form: $("form"), answer: $("answer"),
-    send: $("send"), mic: $("mic"), start: $("start"), resume: $("resume"), unit: $("unit"),
-    unavailable: $("unavailable"), signs: $("signs"), clock: $("clock"), scroll: $("scroll"),
+    brief: $("brief"), log: $("log"), deck: $("deck"), form: $("form"), answer: $("answer"),
+    start: $("start"), resume: $("resume"), unit: $("unit"), prep: $("prep"), pace: $("pace"),
+    unavailable: $("unavailable"), noVoice: $("no-voice"), micNote: $("mic-note"),
+    signs: $("signs"), clock: $("clock"), micChip: $("mic-chip"), scroll: $("scroll"),
+    phase: $("phase"), count: $("count"), bar: $("bar"), livebox: $("livebox"),
+    tapSpeak: $("tap-speak"), done: $("done"), skipPrep: $("skip-prep"),
     save: $("save"), restart: $("restart"), confirmRestart: $("confirm-restart"),
   };
 
-  let state = { role: null, unit: "", messages: [], part: null, startedAt: null, finished: false };
-  let sample = null, tts = null, dictation = null, downloads = null;
-  let busy = false, controller = null, clockTimer = null;
+  const fresh = () => ({ role: null, unit: "", prep: 5, pace: 1, messages: [], part: null, startedAt: null, finished: false });
+  let state = fresh();
+  let sample = null, dictation = null, downloads = null, tts = null;
+  let capsReady = 0;
+  let controller = null, clockTimer = null, phaseTimer = null, runId = 0;
+
+  // Microphone: started once from a click, kept open; words count only while `capturing`.
+  let micLive = false, capturing = false, buf = "", partial = "", firstWordAt = 0, lastWordAt = 0;
 
   // ---------- storage (per-viewer convenience only) ----------
   const load = () => { try { return JSON.parse(localStorage.getItem(STORE_KEY) || "null"); } catch { return null; } };
   const persist = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch {} };
   const clearStore = () => { try { localStorage.removeItem(STORE_KEY); } catch {} };
 
-  // ---------- helpers ----------
-  const lastTag = (text) => { let m, t = null; TAG_RE.lastIndex = 0; while ((m = TAG_RE.exec(text))) t = m[1].toUpperCase(); return t; };
-  const stripTags = (text) => text.replace(TAG_RE, "").replace(/<<[^>]*$/, "").trimEnd();
+  // ---------- text helpers ----------
+  const lastMatch = (re, text) => { let m, v = null; re.lastIndex = 0; while ((m = re.exec(text))) v = m[1]; return v; };
+  const stripTags = (t) => t.replace(ANY_TAG, "").replace(/<<[^>]*$/, "").trimEnd();
+  const isAudioBlock = (code) => /^\s*\[(AUDIO|RADIO)/i.test(code);
   const md = (text) => {
     const html = DOMPurify.sanitize(marked.parse(stripTags(text), { breaks: true, gfm: true }));
     const wrap = document.createElement("div");
     wrap.innerHTML = html;
     wrap.querySelectorAll("table").forEach((t) => { const d = document.createElement("div"); d.className = "tbl"; t.replaceWith(d); d.appendChild(t); });
+    wrap.querySelectorAll("pre").forEach((p) => {
+      if (!isAudioBlock(p.textContent)) return;
+      const d = document.createElement("details");
+      const s = document.createElement("summary");
+      s.textContent = p.textContent.trim().split("\n")[0].replace(/[\[\]]/g, "") + " · transcript (read after answering)";
+      p.replaceWith(d); d.append(s, p);
+    });
     wrap.querySelectorAll("a").forEach((a) => { a.target = "_blank"; a.rel = "noopener noreferrer"; });
     return wrap.innerHTML;
   };
-  const plain = (text) => stripTags(text)
-    .replace(/```[a-z]*\n?/gi, "").replace(/[*_#>`|]/g, "").replace(/\[(ATC|PILOT)\]:/gi, (m, w) => w + ":")
+  const spoken = (text) => stripTags(text)
+    .replace(/```[a-z]*\n?/gi, "\n")
+    .replace(/^\s*\[(AUDIO RECORDING \d|RADIO EXCHANGE AUDIO \d)\]\s*$/gim, "Recording begins.")
+    .replace(/\[(ATC|PILOT|CONTROLLER)\]\s*:/gi, (m, w) => (w.toUpperCase() === "PILOT" ? "Pilot" : "A T C") + ":")
+    .replace(/[*_#>`|~]/g, "").replace(/\[|\]/g, "")
     .replace(/\n{2,}/g, "\n").trim();
+  const words = (t) => (t.trim().match(/[A-Za-z0-9'’-]+/g) || []).length;
+  const fmt = (s) => Math.floor(s / 60) + ":" + String(Math.max(0, Math.ceil(s) % 60)).padStart(2, "0");
   const scrollDown = () => { els.scroll.scrollTop = els.scroll.scrollHeight; };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  // ---------- rendering ----------
   function renderSigns() {
     const idx = PARTS.findIndex((p) => p.id === state.part);
     els.signs.innerHTML = "";
@@ -298,14 +391,11 @@ End EVERY reply with one line containing only the tag for the part the reply bel
     bubble.className = "bubble";
     if (role === "assistant") {
       bubble.innerHTML = md(text);
-      if (tts) {
-        const b = document.createElement("button");
-        b.type = "button"; b.className = "icon-btn"; b.textContent = "LISTEN";
-        b.addEventListener("click", () => speak(text, b));
-        who.appendChild(b);
-      }
     } else {
-      bubble.textContent = text;
+      const nl = text.indexOf("\n");
+      const head = text.startsWith("[") && nl > 0 ? text.slice(1, nl - 1) : "";
+      bubble.textContent = head ? text.slice(nl + 1) : text;
+      if (head) { const st = document.createElement("span"); st.className = "stats"; st.textContent = head; who.appendChild(st); }
     }
     wrap.append(who, bubble);
     return { wrap, bubble };
@@ -313,127 +403,302 @@ End EVERY reply with one line containing only the tag for the part the reply bel
 
   function renderLog() {
     els.log.innerHTML = "";
-    // messages[0] is the hidden briefing to Claude; show from the first examiner turn.
     state.messages.slice(1).forEach((m) => els.log.appendChild(messageEl(m.role, m.content).wrap));
     renderSigns();
     els.save.hidden = !(state.finished && downloads);
     scrollDown();
   }
 
+  function setPhase(kind, label, opts = {}) {
+    els.phase.className = "phase " + (kind || "");
+    els.phase.innerHTML = "";
+    if (kind === "speak") { const d = document.createElement("span"); d.className = "dot"; els.phase.appendChild(d); }
+    els.phase.appendChild(document.createTextNode(label));
+    els.count.textContent = opts.count || "";
+    els.bar.style.width = (opts.progress || 0) + "%";
+    els.deck.classList.toggle("answering", kind === "speak");
+    els.done.hidden = !opts.done;
+    els.skipPrep.hidden = !opts.skip;
+    els.tapSpeak.hidden = !opts.tap;
+    els.form.hidden = !opts.typing;
+  }
+
+  function setMicChip() {
+    els.micChip.textContent = micLive ? "MIC LIVE" : "MIC OFF";
+    els.micChip.classList.toggle("on", micLive);
+  }
+
+  function renderLive() {
+    els.livebox.innerHTML = "";
+    if (buf) els.livebox.appendChild(document.createTextNode(buf.trimStart()));
+    if (partial) { const s = document.createElement("span"); s.className = "partial"; s.textContent = (buf ? " " : "") + partial; els.livebox.appendChild(s); }
+    els.livebox.scrollTop = els.livebox.scrollHeight;
+  }
+
+  // ---------- microphone ----------
+  function bindDictation() {
+    dictation.onPartial(({ text }) => {
+      if (!capturing) return;
+      partial = text;
+      if (text) { const now = Date.now(); if (!firstWordAt) firstWordAt = now; lastWordAt = now; }
+      renderLive();
+    });
+    dictation.onFinal(({ text }) => {
+      if (!capturing) return;
+      buf += text;
+      partial = "";
+      const now = Date.now(); if (!firstWordAt) firstWordAt = now; lastWordAt = now;
+      renderLive();
+    });
+    dictation.onState(({ state: st }) => {
+      micLive = st === "listening" || st === "starting";
+      setMicChip();
+      if (!micLive && capturing && dictation) els.tapSpeak.hidden = false;
+      if (micLive) els.tapSpeak.hidden = true;
+    });
+  }
+
+  // Must run synchronously inside a click handler.
+  function micOnFromGesture() {
+    if (!dictation || micLive) return;
+    dictation.start({ language: "en" }).catch((e) => {
+      if (e && (e.code === "not_granted" || e.code === "unavailable")) { dictation = null; els.tapSpeak.hidden = true; if (capturing) els.form.hidden = false; }
+    });
+  }
+
+  // ---------- examiner voice ----------
+  // Browser speech synthesis does not compete with the open microphone; Claude's own voice (tts) does, so it is the fallback.
+  let voice = null;
+  const synth = window.speechSynthesis || null;
+  function pickVoice() {
+    if (!synth) return;
+    const vs = synth.getVoices() || [];
+    voice = vs.find((v) => /en-GB/i.test(v.lang)) || vs.find((v) => /en-US/i.test(v.lang)) || vs.find((v) => /^en/i.test(v.lang)) || null;
+  }
+  if (synth) { pickVoice(); try { synth.addEventListener("voiceschanged", pickVoice); } catch {} }
+  function unlockSynth() { if (!synth) return; try { const u = new SpeechSynthesisUtterance(" "); u.volume = 0; synth.speak(u); } catch {} }
+
+  const chunk = (text, max) => {
+    const sentences = text.split(/(?<=[.!?:;])\s+|\n/).map((s) => s.trim()).filter(Boolean);
+    const out = [];
+    sentences.forEach((s) => { const l = out[out.length - 1]; if (l && l.length + s.length < max) out[out.length - 1] = l + " " + s; else out.push(s.slice(0, max)); });
+    return out;
+  };
+
+  function sayBrowser(text, id) {
+    return new Promise((resolve) => {
+      const parts = chunk(text, 220);
+      let i = 0;
+      try { synth.cancel(); } catch {}
+      const next = () => {
+        if (i >= parts.length || id !== runId) return resolve();
+        const piece = parts[i++];
+        const u = new SpeechSynthesisUtterance(piece);
+        if (voice) { u.voice = voice; u.lang = voice.lang; } else u.lang = "en-GB";
+        u.rate = 0.97;
+        let fin = false;
+        const done = () => { if (fin) return; fin = true; clearTimeout(t); next(); };
+        const t = setTimeout(done, 3000 + piece.length * 95);
+        u.onend = done; u.onerror = done;
+        synth.speak(u);
+      };
+      next();
+    });
+  }
+
+  async function say(text, id) {
+    const t = spoken(text);
+    if (!t) return;
+    if (synth) {
+      // Android loads voices late; wait briefly so the first question gets an English voice.
+      for (let i = 0; i < 15 && !voice && !synth.getVoices().length; i++) await sleep(100);
+      if (!voice) pickVoice();
+      return sayBrowser(t, id);
+    }
+    if (tts) {
+      if (micLive && dictation) await dictation.stop().catch(() => {});
+      await tts.speak(chunk(t, 1800).slice(0, 100).map((x) => ({ text: x })), { language: "en" }).catch(() => {});
+    }
+  }
+
+  // ---------- exam loop ----------
+  async function examinerTurn() {
+    const id = ++runId;
+    if (!sample) { els.unavailable.hidden = false; return; }
+    setPhase("", "Examiner is preparing…");
+    const { wrap, bubble } = messageEl("assistant", "");
+    bubble.innerHTML = '<span class="typing">…</span>';
+    els.log.appendChild(wrap);
+    scrollDown();
+    controller = new AbortController();
+    let text;
+    try {
+      ({ text } = await sample(state.messages, {
+        cache: false,
+        signal: controller.signal,
+        onText: ({ text }) => { bubble.innerHTML = md(text) || '<span class="typing">…</span>'; scrollDown(); },
+      }));
+    } catch (e) {
+      wrap.remove();
+      if (e && e.code === "cancelled") return;
+      const msg = {
+        not_granted: "Claude access was declined for this page. Allow it from the page's Permissions menu, then tap Retry.",
+        rate_limited: "Too many requests, or your Claude usage limit was reached. Wait a moment, then tap Retry.",
+        sampling_disabled: "Claude is not available for this account.",
+      }[e && e.code] || "The examiner could not reply. Tap Retry.";
+      setPhase("", "Connection problem");
+      const w = document.createElement("div");
+      w.className = "warn row";
+      w.append(document.createTextNode(msg + " "));
+      const b = document.createElement("button"); b.className = "icon-btn"; b.textContent = "RETRY";
+      b.addEventListener("click", () => { w.remove(); examinerTurn(); });
+      w.appendChild(b);
+      els.log.appendChild(w);
+      scrollDown();
+      return;
+    } finally { controller = null; }
+    if (id !== runId) return;
+    const tag = (lastMatch(PART_RE, text) || "").toUpperCase();
+    if (PARTS.some((p) => p.id === tag)) state.part = tag;
+    if (tag === "REPORT") state.finished = true;
+    state.messages.push({ role: "assistant", content: text });
+    persist();
+    renderLog();
+    runQuestion(text, id);
+  }
+
+  async function runQuestion(text, id) {
+    if (state.finished) { finishExam(); return; }
+    setPhase("", "Examiner speaking", { count: "" });
+    await say(text, id);
+    if (id !== runId) return;
+
+    // Thinking time
+    const prep = state.prep;
+    const t0 = Date.now();
+    await new Promise((resolve) => {
+      skipPrep = resolve;
+      const step = () => {
+        if (id !== runId) return resolve();
+        const left = prep - (Date.now() - t0) / 1000;
+        if (left <= 0) return resolve();
+        setPhase("prep", "Get ready", { count: String(Math.ceil(left)), progress: 100 * (1 - left / prep), skip: true });
+        phaseTimer = setTimeout(step, 100);
+      };
+      step();
+    });
+    clearTimeout(phaseTimer);
+    skipPrep = null;
+    if (id !== runId) return;
+
+    await answerWindow(text, id);
+  }
+  let skipPrep = null;
+  let finishNow = null;
+
+  async function answerWindow(text, id) {
+    const part = PARTS.find((p) => p.id === state.part) || PARTS[0];
+    const asked = parseInt(lastMatch(TIME_RE, text) || "0", 10);
+    const secs = Math.round(Math.min(150, Math.max(15, (asked || part.secs) * state.pace)));
+    let typing = !dictation;
+    buf = ""; partial = ""; firstWordAt = 0; lastWordAt = 0;
+    els.answer.value = "";
+    renderLive();
+    capturing = true;
+    const start = Date.now();
+    let reason = "time";
+    if (typing) setTimeout(() => els.answer.focus({ preventScroll: true }), 0);
+
+    await new Promise((resolve) => {
+      finishNow = (r) => { reason = r; resolve(); };
+      const step = () => {
+        if (id !== runId) return resolve();
+        typing = !dictation;
+        const elapsed = (Date.now() - start) / 1000;
+        const left = secs - elapsed;
+        if (left <= 0) { reason = "time"; return resolve(); }
+        const spokeSomething = typing ? els.answer.value.trim().length > 0 : !!(buf.trim() || partial);
+        if (!typing && spokeSomething && lastWordAt && Date.now() - lastWordAt > SILENCE_MS) { reason = "silence"; return resolve(); }
+        setPhase("speak", typing ? "Type now" : "Speak now", {
+          count: fmt(left), progress: 100 * (elapsed / secs), done: spokeSomething,
+          tap: !typing && !micLive, typing,
+        });
+        phaseTimer = setTimeout(step, 200);
+      };
+      step();
+    });
+    clearTimeout(phaseTimer);
+    finishNow = null;
+    if (id !== runId) { capturing = false; return; }
+
+    setPhase("", "Saving answer…");
+    if (!typing) await sleep(GRACE_MS);
+    capturing = false;
+    const answerText = (typing ? els.answer.value : (buf + (partial ? " " + partial : ""))).replace(/\s+/g, " ").trim();
+    const used = ((reason === "time" ? secs * 1000 : (lastWordAt || Date.now()) - start) / 1000);
+    const n = words(answerText);
+    const speakSecs = firstWordAt && lastWordAt > firstWordAt ? (lastWordAt - firstWordAt) / 1000 : 0;
+    const wpm = speakSecs > 3 ? Math.round(n / (speakSecs / 60)) : null;
+    const delay = firstWordAt ? ((firstWordAt - start) / 1000).toFixed(1) : null;
+    const meta = typing
+      ? `[Typed answer (voice unavailable) · ${secs} s window · ${n} words${reason === "time" ? " · time ran out" : ""}]`
+      : n === 0
+        ? `[No response · ${secs} s window]`
+        : `[Spoken answer · ${secs} s window · ${n} words${wpm ? " · " + wpm + " wpm" : ""}${delay ? " · first word after " + delay + " s" : ""}${reason === "time" ? " · time ran out" : reason === "silence" ? " · stopped speaking" : " · finished early at " + Math.round(used) + " s"}]`;
+    buf = ""; partial = ""; renderLive();
+    state.messages.push({ role: "user", content: meta + "\n" + (answerText || "(silence)") });
+    persist();
+    renderLog();
+    examinerTurn();
+  }
+
+  function finishExam() {
+    capturing = false;
+    if (dictation && micLive) dictation.stop().catch(() => {});
+    setPhase("", "Evaluation complete");
+    els.livebox.hidden = true;
+    els.save.hidden = !downloads;
+    releaseWake();
+  }
+
+  // Keep the screen on during the exam where the browser allows it.
+  let wake = null;
+  async function holdWake() { try { wake = await navigator.wakeLock.request("screen"); } catch {} }
+  function releaseWake() { try { wake && wake.release(); } catch {} wake = null; }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && state.startedAt && !state.finished) holdWake(); });
+
   function showExam() {
     els.brief.hidden = true;
     els.log.hidden = false;
-    els.composer.hidden = false;
+    els.deck.hidden = false;
+    els.livebox.hidden = false;
     clearInterval(clockTimer);
     clockTimer = setInterval(tickClock, 1000);
     tickClock();
     renderLog();
+    holdWake();
   }
 
   function showBrief() {
-    els.brief.hidden = false;
-    els.log.hidden = true;
-    els.composer.hidden = true;
-    clearInterval(clockTimer);
-    state = { role: null, unit: "", messages: [], part: null, startedAt: null, finished: false };
+    runId++;
+    capturing = false;
+    if (controller) controller.abort();
+    try { synth && synth.cancel(); } catch {}
+    if (tts) tts.stop();
+    if (dictation && micLive) dictation.stop().catch(() => {});
+    clearInterval(clockTimer); clearTimeout(phaseTimer);
+    releaseWake();
+    state = fresh();
+    els.brief.hidden = false; els.log.hidden = true; els.deck.hidden = true;
     document.querySelectorAll(".role").forEach((b) => b.setAttribute("aria-pressed", "false"));
     els.start.disabled = true;
     els.resume.hidden = true;
-    renderSigns();
-    tickClock();
-  }
-
-  function setBusy(v) {
-    busy = v;
-    els.send.disabled = v || state.finished;
-    els.answer.disabled = state.finished;
-    els.send.textContent = v ? "Wait" : "Send";
-  }
-
-  // ---------- Claude turn ----------
-  async function examinerTurn() {
-    if (!sample) { els.unavailable.hidden = false; return; }
-    setBusy(true);
-    const { wrap, bubble } = messageEl("assistant", "");
-    bubble.innerHTML = '<span class="typing">Examiner is speaking…</span>';
-    els.log.appendChild(wrap);
-    scrollDown();
-    controller = new AbortController();
-    try {
-      const { text } = await sample(state.messages, {
-        cache: false,
-        signal: controller.signal,
-        onText: ({ text }) => { bubble.innerHTML = md(text) || '<span class="typing">Examiner is speaking…</span>'; scrollDown(); },
-      });
-      const tag = lastTag(text);
-      if (tag && PARTS.some((p) => p.id === tag)) state.part = tag;
-      if (tag === "REPORT") state.finished = true;
-      state.messages.push({ role: "assistant", content: text });
-      persist();
-      renderLog();
-    } catch (e) {
-      wrap.remove();
-      const msg = {
-        not_granted: "Claude access was declined for this page. Allow it from the page's Permissions menu to continue.",
-        rate_limited: "Too many requests, or your Claude usage limit was reached. Wait a moment, then send your answer again.",
-        sampling_disabled: "Claude is not available for this account.",
-        cancelled: null,
-      }[e && e.code];
-      if (msg !== null) {
-        const w = document.createElement("div");
-        w.className = "warn";
-        w.textContent = msg || "The examiner could not reply. Send your answer again.";
-        els.log.appendChild(w);
-        scrollDown();
-      }
-      // Leave the last candidate turn in place so a resend retries it.
-      if (state.messages.length && state.messages[state.messages.length - 1].role === "user" && state.messages.length > 1) {
-        els.answer.value = state.messages.pop().content;
-        persist();
-      }
-    } finally {
-      controller = null;
-      setBusy(false);
-      if (!state.finished) els.answer.focus({ preventScroll: true });
-    }
+    renderSigns(); tickClock();
   }
 
   function briefing() {
     const unit = state.unit ? ` Aircraft / unit: ${state.unit}.` : "";
-    return `${EXAMINER}\n\n# CANDIDATE\nRole: ${state.role}.${unit}\n\nBegin now with a one-line greeting that acknowledges the role, then PART 1, question 1.`;
-  }
-
-  // ---------- speech ----------
-  async function speak(text, btn) {
-    if (!tts) return;
-    const chunks = plain(text).split("\n").filter(Boolean).reduce((acc, line) => {
-      const last = acc[acc.length - 1];
-      if (last && last.length + line.length < 1800) acc[acc.length - 1] = last + "\n" + line; else acc.push(line.slice(0, 1990));
-      return acc;
-    }, []);
-    btn.textContent = "PLAYING";
-    try { await tts.speak(chunks.map((c) => ({ text: c })), state.finished ? {} : { language: "en" }); }
-    catch (e) { /* stopped, replaced or unavailable */ }
-    finally { btn.textContent = "LISTEN"; }
-  }
-
-  let micBase = "", micOn = false;
-  function bindDictation() {
-    els.mic.hidden = false;
-    dictation.onPartial(({ text }) => { els.answer.value = micBase + text; });
-    dictation.onFinal(({ text }) => { micBase = micBase + text + " "; els.answer.value = micBase; });
-    dictation.onState(({ state: st }) => {
-      micOn = st === "listening" || st === "starting";
-      els.mic.classList.toggle("on", micOn);
-      els.mic.textContent = micOn ? "STOP" : "MIC";
-    });
-    els.mic.addEventListener("click", () => {
-      if (micOn) { dictation.stop().catch(() => {}); return; }
-      micBase = els.answer.value ? els.answer.value.replace(/\s*$/, " ") : "";
-      dictation.start({ language: "en-US" }).catch((e) => {
-        if (e && e.code === "not_granted") els.mic.hidden = true;
-      });
-    });
+    return `${EXAMINER}\n\n# CANDIDATE\nRole: ${state.role}.${unit}\nAnswer mode: ${dictation ? "spoken (speech-to-text)" : "typed, because voice input is unavailable on this device"}.\n\nBegin now with a one-line greeting that acknowledges the role, then PART 1, question 1.`;
   }
 
   // ---------- events ----------
@@ -446,7 +711,11 @@ End EVERY reply with one line containing only the tag for the part the reply bel
   els.start.addEventListener("click", () => {
     if (!state.role) return;
     if (!sample) { els.unavailable.hidden = false; return; }
+    micOnFromGesture();      // synchronous, inside the click
+    unlockSynth();
     state.unit = els.unit.value.trim().slice(0, 80);
+    state.prep = parseInt(els.prep.value, 10) || 5;
+    state.pace = parseFloat(els.pace.value) || 1;
     state.messages = [{ role: "user", content: briefing() }];
     state.part = "1";
     state.startedAt = Date.now();
@@ -459,52 +728,41 @@ End EVERY reply with one line containing only the tag for the part the reply bel
   els.resume.addEventListener("click", () => {
     const saved = load();
     if (!saved) return;
+    micOnFromGesture();
+    unlockSynth();
     state = saved;
     showExam();
+    if (state.finished) { finishExam(); return; }
     const last = state.messages[state.messages.length - 1];
-    if (last && last.role === "user" && !state.finished) examinerTurn();
+    if (last && last.role === "user") examinerTurn();
+    else if (last) runQuestion(last.content, ++runId);
   });
 
-  els.form.addEventListener("submit", (ev) => {
-    ev.preventDefault();
-    const text = els.answer.value.trim();
-    if (!text || busy || state.finished) return;
-    if (micOn && dictation) dictation.stop().catch(() => {});
-    state.messages.push({ role: "user", content: text });
-    els.answer.value = "";
-    micBase = "";
-    persist();
-    renderLog();
-    examinerTurn();
+  els.tapSpeak.addEventListener("click", () => { micOnFromGesture(); });
+  els.done.addEventListener("click", () => { if (finishNow) finishNow("done"); });
+  els.skipPrep.addEventListener("click", () => {
+    if (skipPrep) { micOnFromGesture(); skipPrep(); }
   });
-
+  els.form.addEventListener("submit", (ev) => { ev.preventDefault(); if (finishNow) finishNow("done"); });
   els.answer.addEventListener("keydown", (ev) => {
-    if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); els.form.requestSubmit(); }
-  });
-  els.answer.addEventListener("input", () => {
-    els.answer.style.height = "auto";
-    els.answer.style.height = els.answer.scrollHeight + "px";
+    if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); if (finishNow) finishNow("done"); }
   });
 
   els.restart.addEventListener("click", () => {
-    if (state.finished) { reset(); return; }
+    if (state.finished) { clearStore(); showBrief(); return; }
     els.restart.hidden = true;
     els.confirmRestart.hidden = false;
     setTimeout(() => { els.confirmRestart.hidden = true; els.restart.hidden = false; }, 4000);
   });
-  els.confirmRestart.addEventListener("click", reset);
-  function reset() {
-    if (controller) controller.abort();
-    if (tts) tts.stop();
+  els.confirmRestart.addEventListener("click", () => {
     clearStore();
-    els.confirmRestart.hidden = true;
-    els.restart.hidden = false;
+    els.confirmRestart.hidden = true; els.restart.hidden = false;
     showBrief();
-  }
+  });
 
   els.save.addEventListener("click", async () => {
     if (!downloads) return;
-    const lines = [`# ELPAT simulation — ${state.role}${state.unit ? " (" + state.unit + ")" : ""}`, `Date: ${new Date(state.startedAt).toLocaleString()}`, ""];
+    const lines = [`# ELPAT speaking simulation — ${state.role}${state.unit ? " (" + state.unit + ")" : ""}`, `Date: ${new Date(state.startedAt).toLocaleString()}`, ""];
     state.messages.slice(1).forEach((m) => lines.push(`## ${m.role === "assistant" ? "Examiner" : "Candidate"}`, stripTags(m.content), ""));
     try { await downloads.save({ filename: "elpat-report.md", data: lines.join("\n") }); } catch {}
   });
@@ -515,9 +773,10 @@ End EVERY reply with one line containing only the tag for the part the reply bel
   if (saved && saved.messages && saved.messages.length > 1) els.resume.hidden = false;
 
   const use = window.claude && window.claude.use ? (n) => window.claude.use(n).catch(() => null) : () => Promise.resolve(null);
-  use("sample").then((s) => { sample = s; if (!s) els.unavailable.hidden = false; });
-  use("tts").then((t) => { tts = t; if (t && !els.log.hidden) renderLog(); });
-  use("dictation").then((d) => { dictation = d; if (d) bindDictation(); });
+  const ready = () => { if (++capsReady === 2 && !dictation) { els.noVoice.hidden = false; els.micNote.hidden = true; } };
+  use("sample").then((s) => { sample = s; if (!s) els.unavailable.hidden = false; ready(); });
+  use("dictation").then((d) => { dictation = d; if (d) bindDictation(); ready(); });
+  use("tts").then((t) => { tts = t; });
   use("downloads").then((d) => { downloads = d; els.save.hidden = !(state.finished && d); });
 })();
 </script>
