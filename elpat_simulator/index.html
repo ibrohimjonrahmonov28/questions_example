@@ -147,9 +147,9 @@ p { margin: 0; }
 .live { min-height: 40px; max-height: 18vh; overflow-y: auto; background: var(--bg); border: 1px solid var(--bezel); border-radius: 6px; padding: 8px 10px; font-size: 14px; }
 .live .partial { color: var(--muted); }
 .live:empty::before { content: "Speak now. Your words appear here."; color: var(--muted); font-style: italic; }
-.keys { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 8px; }
+.keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .key { --k: var(--cyan); position: relative; min-height: 58px; border-radius: 6px; border: 1px solid #2c3d4c; background: linear-gradient(#1b2834, #131e27);
-  font-family: var(--font-mono); font-weight: 700; font-size: 14px; letter-spacing: .12em; color: var(--ink); padding: 16px 8px 10px; }
+  font-family: var(--font-mono); font-weight: 700; font-size: 13px; letter-spacing: .06em; color: var(--ink); padding: 16px 4px 10px; line-height: 1.15; }
 .key::before { content: ""; position: absolute; left: 12px; right: 12px; top: 6px; height: 3px; border-radius: 2px; background: #2a3946; }
 .key.on::before { background: var(--k); box-shadow: 0 0 8px var(--k); }
 .key:disabled { opacity: .38; cursor: not-allowed; }
@@ -157,6 +157,20 @@ p { margin: 0; }
 .key.k-answer.on { color: var(--green); border-color: #2f6b4a; }
 .key.k-stop { --k: var(--red); }
 .key.k-stop.on { color: #fff; background: linear-gradient(#a3302a, #7c211c); border-color: var(--red); }
+.key.k-play { --k: var(--cyan); }
+.key.k-play.on { color: var(--cyan); border-color: #2a6170; }
+.key.k-save { --k: var(--green); }
+.key.k-save.on { color: #04120a; background: linear-gradient(#6fe09b, #46b874); border-color: var(--green); }
+.vu { display: flex; gap: 3px; height: 26px; align-items: flex-end; }
+.vu i { flex: 1; background: var(--red); border-radius: 1px; height: 6%; opacity: .85; transition: height .08s linear; }
+.review { border: 1px solid var(--bezel); border-radius: 6px; padding: 10px 12px; display: grid; gap: 6px; background: var(--bg); }
+.review-row { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 13px; }
+.rv-text { font-size: 14px; color: var(--ink); max-height: 16vh; overflow-y: auto; }
+.rv-text.muted { color: var(--muted); font-style: italic; }
+.rv-text.err { color: var(--amber); }
+.diag summary { font-family: var(--font-mono); font-size: 12px; letter-spacing: .1em; color: var(--muted); cursor: pointer; }
+.diag .checks { margin-top: 8px; }
+.audio-btn { margin-left: 6px; }
 .help { border: 1px solid var(--red); border-radius: 6px; padding: 10px 12px; background: var(--bg); display: grid; gap: 6px; font-size: 14px; }
 .help b { color: var(--red); }
 .errbox { border: 1px solid var(--amber); border-radius: 6px; padding: 10px 12px; display: grid; gap: 8px; font-size: 14px; }
@@ -225,7 +239,7 @@ h2.sec { font-family: var(--font-sign); font-size: 22px; letter-spacing: .03em; 
         <div class="eyebrow">English Language Proficiency · Aviation Test</div>
         <h1 class="hero">A full ELPAT, spoken and timed</h1>
       </div>
-      <p class="sub">Four parts in about 25–30 minutes. The examiner speaks every question. You press ANSWER, speak, and press STOP. At the end you get an indicative ICAO level for each of the six criteria.</p>
+      <p class="sub">Four parts in about 25–30 minutes. The examiner speaks every question. You press RECORD, speak, press STOP, listen back if you want, and press SAVE ANSWER. At the end you get an indicative ICAO level for each of the six criteria.</p>
 
       <div class="du">
         <div class="label">Candidate</div>
@@ -268,8 +282,9 @@ h2.sec { font-family: var(--font-sign); font-size: 22px; letter-spacing: .03em; 
           <button class="btn ghost" id="btn-check">Sound check</button>
         </div>
         <ul class="checks" id="check-out" hidden aria-live="polite"></ul>
+        <details class="diag" id="mic-diag-box"><summary>MICROPHONE DIAGNOSTICS</summary><ul class="checks" id="mic-diag"></ul></details>
         <div class="warn" id="w-claude" hidden>The examiner needs Claude. Open this page on claude.ai while signed in.</div>
-        <div class="warn" id="w-voice" hidden>The microphone is not available in this app. Open the exam in <b>Chrome</b> to answer by voice: <span class="url">https://claude.ai/artifact/1PHDiym9rbha53ewUVKzL5</span></div>
+        <div class="warn" id="w-voice" hidden>Voice recording is not available here. Open the diagnostics below for the reason. On claude.ai, use <b>Chrome</b>: <span class="url">https://claude.ai/artifact/1PHDiym9rbha53ewUVKzL5</span></div>
       </div>
 
       <div class="du">
@@ -308,7 +323,12 @@ h2.sec { font-family: var(--font-sign); font-size: 22px; letter-spacing: .03em; 
   <footer class="pedestal" id="pedestal" hidden>
     <div class="ped-top"><div class="status" id="status">STANDBY</div><div class="ptimer" id="ptimer"></div></div>
     <div class="bar" id="pbar"><i id="pbar-i"></i></div>
+    <div class="vu" id="vu" hidden aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
     <div class="live" id="live" hidden></div>
+    <div class="review" id="review" hidden>
+      <div class="review-row"><span id="rv-dur">0:00 recorded</span><span id="rv-info" class="note"></span></div>
+      <div class="rv-text" id="rv-text"></div>
+    </div>
     <textarea class="typed" id="typed" rows="3" placeholder="Type your answer…" aria-label="Typed answer" hidden></textarea>
     <div class="errbox" id="errbox" hidden><span id="errmsg"></span><div class="row"><button class="btn small" id="btn-retry">RETRY</button></div></div>
     <div class="help" id="help" hidden role="alert">
@@ -322,9 +342,12 @@ h2.sec { font-family: var(--font-sign); font-size: 22px; letter-spacing: .03em; 
       </div>
     </div>
     <div class="keys">
-      <button class="key k-answer" id="btn-answer" disabled><span class="kl">ANSWER</span></button>
+      <button class="key k-answer" id="btn-record" disabled><span class="kl">RECORD</span></button>
       <button class="key k-stop" id="btn-stop" disabled><span class="kl">STOP</span></button>
-      <button class="key" id="btn-replay" disabled><span class="kl">REPLAY</span></button>
+      <button class="key" id="btn-replay" disabled><span class="kl">REPLAY Q</span></button>
+      <button class="key k-play" id="btn-play" disabled><span class="kl">PLAYBACK</span></button>
+      <button class="key" id="btn-rerecord" disabled><span class="kl">RE-RECORD</span></button>
+      <button class="key k-save" id="btn-save" disabled><span class="kl">SAVE ANSWER</span></button>
     </div>
     <div class="row"><button class="btn ghost small" id="btn-new">New exam</button><button class="btn ghost small" id="btn-new-confirm" hidden>Tap again to discard this exam</button></div>
   </footer>
@@ -394,7 +417,9 @@ h2.sec { font-family: var(--font-sign); font-size: 22px; letter-spacing: .03em; 
     errbox: $("errbox"), errmsg: $("errmsg"), btnRetry: $("btn-retry"),
     help: $("help"), helpTitle: $("help-title"), helpReason: $("help-reason"), helpOpen: $("help-open"), helpUrl: $("help-url"),
     btnCopy: $("btn-copy"), btnPerms: $("btn-perms"), btnType: $("btn-type"),
-    btnAnswer: $("btn-answer"), btnStop: $("btn-stop"), btnReplay: $("btn-replay"), btnNew: $("btn-new"), btnNewConfirm: $("btn-new-confirm"),
+    btnRecord: $("btn-record"), btnStop: $("btn-stop"), btnReplay: $("btn-replay"), btnPlay: $("btn-play"), btnRerecord: $("btn-rerecord"), btnSave: $("btn-save"),
+    btnNew: $("btn-new"), btnNewConfirm: $("btn-new-confirm"), vu: $("vu"), review: $("review"), rvDur: $("rv-dur"), rvInfo: $("rv-info"), rvText: $("rv-text"),
+    micDiag: $("mic-diag"), micDiagBox: $("mic-diag-box"),
     annRec: $("ann-rec"), annPart: $("ann-part"), annExam: $("ann-exam"), signs: $("signs"),
     btnStart: $("btn-start"), btnResume: $("btn-resume"), btnCheck: $("btn-check"), checkOut: $("check-out"),
     wClaude: $("w-claude"), wVoice: $("w-voice"),
@@ -405,14 +430,15 @@ h2.sec { font-family: var(--font-sign); font-size: 22px; letter-spacing: .03em; 
   };
 
   // ================================================================== state (per-viewer, browser storage)
-  const fresh = () => ({ v: 3, cfg: null, startedAt: 0, partStart: {}, part: 0, content: {}, done: {}, answers: [], plays: {}, notes: {},
+  const fresh = () => ({ v: 3, examId: "", cfg: null, startedAt: 0, partStart: {}, part: 0, content: {}, done: {}, answers: [], plays: {}, notes: {},
     rt: { log: [], checks: [], next: null }, result: null, finished: false });
   let state = fresh();
   const load = () => { try { return JSON.parse(localStorage.getItem(STORE_KEY) || "null"); } catch { return null; } };
   const persist = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch {} };
   const clearStore = () => { try { localStorage.removeItem(STORE_KEY); } catch {} };
 
-  let sample = null, tts = null, dictation = null, downloads = null, db = null, assets = null, user = null;
+  let sample = null, tts = null, dictation = null, downloads = null, db = null, assets = null, user = null, stt = null;
+  const STANDALONE = !!window.ELPAT_STANDALONE; // set by the standalone server's shim
   let canEdit = false, imgLimits = null, pairs = [];
 
   // Cancellation: each async helper captures the generation it was called in; "New exam" bumps it.
@@ -606,7 +632,11 @@ h2.sec { font-family: var(--font-sign); font-size: 22px; letter-spacing: .03em; 
     });
   }
 
-  // ================================================================== microphone: platform speech-to-text from the real mic
+  // ================================================================== microphone
+  // Two capture paths, used together where both exist:
+  //   1. MediaRecorder (getUserMedia): real audio, kept per answer for PLAYBACK and saved to IndexedDB. Transcribed by the
+  //      standalone server's speech-to-text. Claude artifacts block getUserMedia in their frame, so there it is detected and skipped.
+  //   2. Claude dictation (claude.ai only): live speech-to-text from the real mic, text only.
   let micLive = false, micListening = false, micFailed = null, voiceMissing = "missing";
   let capturing = false, buf = "", partial = "", firstWordAt = 0, lastWordAt = 0;
   function bindDictation() {
@@ -630,46 +660,216 @@ h2.sec { font-family: var(--font-sign); font-size: 22px; letter-spacing: .03em; 
     if (partial) els.live.appendChild(el("span", "partial", (buf ? " " : "") + partial));
     els.live.scrollTop = els.live.scrollHeight;
   }
+
+  // ---------- MediaRecorder
+  const recorder = (() => {
+    const MIMES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4;codecs=mp4a.40.2", "audio/mp4", "audio/aac", "audio/ogg;codecs=opus"];
+    let stream = null, mr = null, chunks = [], t0 = 0, ac = null, src = null, levelT = null, vad = { first: 0, last: 0 }, mime = "";
+    const pickMime = () => { if (typeof MediaRecorder === "undefined") return ""; for (const m of MIMES) { try { if (MediaRecorder.isTypeSupported(m)) return m; } catch {} } return ""; };
+    function support() {
+      if (!window.isSecureContext) return "insecure";
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return "no_getusermedia";
+      if (typeof MediaRecorder === "undefined") return "no_mediarecorder";
+      try { const pp = document.permissionsPolicy || document.featurePolicy; if (pp && pp.allowsFeature && !pp.allowsFeature("microphone")) return "policy_blocked"; } catch {}
+      return "";
+    }
+    const inFrame = () => { try { return window.self !== window.top; } catch { return true; } };
+    function mapError(e, ms) {
+      const n = (e && e.name) || "";
+      if (n === "NotAllowedError" || n === "PermissionDeniedError" || n === "SecurityError") return (!STANDALONE && window.claude) || (inFrame() && ms < 400) ? "frame_blocked" : "denied";
+      if (n === "NotFoundError" || n === "DevicesNotFoundError") return "no_device";
+      if (n === "NotReadableError" || n === "TrackStartError") return "busy";
+      if (n === "AbortError") return "aborted";
+      if (n === "TypeError") return "insecure";
+      return "unknown";
+    }
+    // Starts recording. Call it from inside a click; resolves once audio is flowing.
+    async function start(onLevel) {
+      const unsupported = support();
+      if (unsupported) throw { code: unsupported };
+      const ask = Date.now();
+      const constraints = { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } };
+      try { stream = await navigator.mediaDevices.getUserMedia(constraints); }
+      catch (e) {
+        if (e && e.name === "OverconstrainedError") { try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (e2) { throw { code: mapError(e2, Date.now() - ask), name: e2 && e2.name }; } }
+        else throw { code: mapError(e, Date.now() - ask), name: e && e.name };
+      }
+      mime = pickMime();
+      try { mr = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 64000 } : undefined); }
+      catch { mr = new MediaRecorder(stream); mime = mr.mimeType || ""; }
+      chunks = []; vad = { first: 0, last: 0 };
+      mr.ondataavailable = (ev) => { if (ev.data && ev.data.size) chunks.push(ev.data); };
+      mr.start(1000); // timeslices keep data safe if Android suspends the tab
+      t0 = Date.now();
+      try { // live input level from the real microphone (also gives speech start/end for fluency metrics)
+        const AC = window.AudioContext || window.webkitAudioContext;
+        ac = new AC(); src = ac.createMediaStreamSource(stream);
+        const an = ac.createAnalyser(); an.fftSize = 1024; src.connect(an);
+        const data = new Float32Array(an.fftSize);
+        levelT = setInterval(() => {
+          an.getFloatTimeDomainData(data); let sum = 0; for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+          const rms = Math.sqrt(sum / data.length), now = Date.now();
+          if (rms > 0.02) { if (!vad.first) vad.first = now; vad.last = now; }
+          if (onLevel) onLevel(rms);
+        }, 80);
+      } catch {}
+    }
+    function stop() {
+      return new Promise((resolve) => {
+        if (!mr) return resolve(null);
+        const finish = () => {
+          const type = (mr && mr.mimeType) || mime || (chunks[0] && chunks[0].type) || "audio/webm";
+          const blob = new Blob(chunks, { type });
+          const out = { blob, mime: type, dur: (Date.now() - t0) / 1000, first: vad.first ? (vad.first - t0) / 1000 : null, speak: vad.first && vad.last > vad.first ? (vad.last - vad.first) / 1000 : 0 };
+          release(); resolve(out);
+        };
+        mr.onstop = finish;
+        try { if (mr.state !== "inactive") mr.stop(); else finish(); } catch { finish(); }
+      });
+    }
+    function release() {
+      clearInterval(levelT); levelT = null;
+      try { src && src.disconnect(); } catch {} try { ac && ac.close(); } catch {}
+      if (stream) stream.getTracks().forEach((t) => t.stop()); // frees the mic so the examiner's voice plays at full volume on Android
+      stream = null; mr = null; ac = null; src = null;
+    }
+    function cancel() { if (mr) { mr.onstop = null; try { mr.stop(); } catch {} } release(); chunks = []; }
+    const active = () => !!(mr && mr.state === "recording");
+    return { support, start, stop, cancel, active, pickMime, inFrame };
+  })();
+  // "unknown" until the first attempt; "blocked" once the browser or the hosting frame refuses.
+  let mediaState = "unknown", mediaErr = "", mediaNoticeShown = false, pendingRec = null;
+  { const why = recorder.support(); if (why) { mediaState = "blocked"; mediaErr = why; } }
+  const mediaUsable = () => mediaState !== "blocked";
+  const canCapture = () => mediaUsable() || !!dictation;
+  function noteMediaFailure(e) {
+    mediaErr = (e && e.code) || "unknown";
+    if (["frame_blocked", "policy_blocked", "insecure", "no_getusermedia", "no_mediarecorder"].includes(mediaErr)) mediaState = "blocked";
+    renderMicDiag();
+  }
+  function onLevel(rms) {
+    const bars = els.vu.children, lvl = Math.min(1, rms * 9);
+    for (let i = 0; i < bars.length; i++) { const shape = 0.55 + 0.45 * Math.sin((i * 7 + Date.now() / 90) % 6.28); bars[i].style.height = Math.max(6, lvl * shape * 100) + "%"; }
+  }
+  // Runs inside the RECORD / RE-RECORD click: both capture paths may only start from a tap.
+  function beginCaptureFromGesture() {
+    pendingRec = mediaUsable() ? recorder.start(onLevel).then(() => ({ ok: true }), (e) => ({ error: e })) : null;
+    micOnFromGesture();
+  }
+
+  // ---------- audio store: one recording per answer, kept in this browser (IndexedDB)
+  const audioDB = (() => {
+    let dbp = null;
+    const open = () => dbp || (dbp = new Promise((res, rej) => {
+      try { const r = indexedDB.open("elpat-audio", 1); r.onupgradeneeded = () => r.result.createObjectStore("answers"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }
+      catch (e) { rej(e); }
+    }));
+    const tx = async (modeRW, fn) => { const d = await open(); return new Promise((res, rej) => { const t = d.transaction("answers", modeRW); const req = fn(t.objectStore("answers")); t.oncomplete = () => res(req && req.result); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }); };
+    return {
+      put: (k, v) => tx("readwrite", (st) => st.put(v, k)).then(() => true, () => false),
+      get: (k) => tx("readonly", (st) => st.get(k)).catch(() => null),
+      clear: () => tx("readwrite", (st) => st.clear()).catch(() => {}),
+    };
+  })();
+
+  // ---------- playback of the candidate's own recording
+  const player = (() => {
+    const audio = new Audio(); audio.preload = "auto";
+    let url = null, cur = null, onChange = null;
+    audio.addEventListener("ended", () => { cur = null; onChange && onChange(); });
+    audio.addEventListener("pause", () => { if (cur && audio.ended === false && audio.currentTime > 0) { /* user pause */ } });
+    audio.addEventListener("timeupdate", () => { onChange && onChange(); });
+    function play(blob, id, cb) {
+      stop();
+      onChange = cb || null;
+      if (url) URL.revokeObjectURL(url);
+      url = URL.createObjectURL(blob); audio.src = url; cur = id;
+      const p = audio.play();
+      if (p && p.catch) p.catch(() => { cur = null; onChange && onChange(); });
+      onChange && onChange();
+    }
+    function stop() { try { audio.pause(); audio.currentTime = 0; } catch {} const was = cur; cur = null; if (was && onChange) onChange(); }
+    return { play, stop, playing: (id) => (id ? cur === id : !!cur), time: () => audio.currentTime || 0 };
+  })();
+
+  // ---------- help panel: why recording cannot start, and what to do
   const HELP = {
-    missing: "This app does not let pages use the microphone. The Claude mobile app, Safari and Firefox do not support it; Chrome does.",
+    missing: "This app does not let pages use the microphone. The Claude mobile app, Safari and Firefox do not support Claude dictation; Chrome does.",
     unavailable: "Speech recognition is not available for this account or browser language here.",
-    not_granted: "Microphone permission is off for this page. Press Open permissions and allow dictation, or allow the microphone for claude.ai in Chrome's site settings. Then press ANSWER again.",
-    dismissed: "The microphone question was closed. Press ANSWER again and choose Allow.",
-    rate_limited: "The microphone is busy. Wait a few seconds and press ANSWER again.",
-    hidden: "The microphone stopped because the screen turned off. Press ANSWER again.",
+    not_granted: "Microphone permission is off for this page. Press Open permissions and allow dictation, or allow the microphone for claude.ai in Chrome's site settings. Then press RECORD again.",
+    dismissed: "The microphone question was closed. Press RECORD again and choose Allow.",
+    rate_limited: "The microphone is busy. Wait a few seconds and press RECORD again.",
+    hidden: "The microphone stopped because the screen turned off. Press RECORD again.",
+    frame_blocked: "The page hosting this simulator blocks direct microphone recording (a Claude artifact runs inside a frame without microphone permission). Use the standalone HTTPS version for recording with playback.",
+    policy_blocked: "Microphone access is blocked by the hosting page's permission policy (iframe without allow=\"microphone\"). Use the standalone HTTPS version.",
+    insecure: "Recording needs a secure page: open the simulator over https:// (or http://localhost).",
+    no_getusermedia: "This browser cannot access the microphone (getUserMedia is missing). Use Google Chrome on Android or a desktop browser.",
+    no_mediarecorder: "This browser cannot record audio (MediaRecorder is missing). Use Google Chrome on Android or a desktop browser.",
+    denied: "Microphone permission was denied. In Chrome tap the icon left of the address → Permissions → Microphone → Allow. On Samsung phones also check Settings → Apps → Chrome → Permissions → Microphone. Then press RECORD again.",
+    no_device: "No microphone was found on this device.",
+    busy: "The microphone is being used by another app (a call, voice recorder or assistant). Close it and press RECORD again.",
+    aborted: "Recording was interrupted. Press RECORD again.",
   };
   function showHelp(code) {
-    const missing = !dictation;
+    const missing = !canCapture();
     els.helpTitle.textContent = missing ? "Voice recording is not available here" : "The microphone did not start";
-    els.helpReason.textContent = HELP[missing ? voiceMissing : code] || "The microphone could not start. Press ANSWER to try again.";
-    els.helpOpen.hidden = !missing;
+    // standalone: the recorder is the only path, so explain its failure; claude.ai: dictation is the fallback, so explain that
+    const key = missing ? (STANDALONE ? mediaErr || "no_mediarecorder" : voiceMissing) : code || mediaErr;
+    els.helpReason.textContent = HELP[key] || "The microphone could not start. Press RECORD to try again.";
+    els.helpOpen.hidden = STANDALONE || !!dictation;
     els.btnPerms.hidden = code !== "not_granted";
     els.help.hidden = false;
   }
   const hideHelp = () => { els.help.hidden = true; };
 
+  // ---------- diagnostics shown on the start screen
+  async function renderMicDiag() {
+    const ul = els.micDiag; if (!ul) return;
+    ul.innerHTML = "";
+    const row = (ok, label, detail) => { const li = el("li"); li.append(el("b", ok === null ? "wait" : ok ? "ok" : "no", ok === null ? "–" : ok ? "OK" : "NO"), el("span", null, label + ": " + detail)); ul.appendChild(li); };
+    const mime = recorder.pickMime();
+    let perm = "unknown";
+    try { if (navigator.permissions && navigator.permissions.query) perm = (await navigator.permissions.query({ name: "microphone" })).state; } catch {}
+    let policy = null; try { const pp = document.permissionsPolicy || document.featurePolicy; if (pp && pp.allowsFeature) policy = pp.allowsFeature("microphone"); } catch {}
+    ul.innerHTML = "";
+    row(null, "Page", STANDALONE ? "standalone web app" : window.claude ? "Claude artifact (inside a frame)" : recorder.inFrame() ? "embedded in a frame" : "top-level page");
+    row(!!window.isSecureContext, "Secure context (HTTPS)", window.isSecureContext ? "yes" : "no: recording needs HTTPS");
+    row(typeof MediaRecorder !== "undefined" && !!mime, "MediaRecorder", typeof MediaRecorder === "undefined" ? "not supported" : mime ? "supported · " + mime : "supported, default format");
+    row(policy !== false && mediaState !== "blocked", "Microphone access for this page", mediaState === "blocked" ? (HELP[mediaErr] || mediaErr) : policy === false ? "blocked by the hosting frame" : perm === "granted" ? "granted" : perm === "denied" ? "denied in browser settings" : "will be asked when you press RECORD");
+    row(!!(stt || dictation), "Speech-to-text", stt ? "server transcription" : dictation ? "Claude dictation (live)" : "not available");
+    const verdict = mediaUsable() && (stt || dictation) ? "Full recording with playback and transcription" : mediaUsable() ? "Recording with playback (no transcription)" : dictation ? "Transcription only, no audio playback (frame blocks recording)" : "Typing only";
+    row(mediaUsable() && !!(stt || dictation), "Result", verdict);
+    els.micDiagBox.open = !(mediaUsable() && (stt || dictation));
+  }
+  // speech-to-text hint: the question plus aviation vocabulary improves recognition of callsigns and numbers
+  const sttPrompt = (o) => ("Aviation English exam answer. " + (o.prompt || "").slice(0, 300) + " ICAO phraseology: Mayday, Pan-Pan, wilco, roger, affirm, negative, readback, QNH, squawk, flight level, heading, runway, helipad, helideck, H215, ATC, Tower, Approach, niner.").slice(0, 800);
+
   // ================================================================== pedestal and actions
   let mode = "idle", modeOpts = {}, waiter = null, retryResolve = null, recTimer = null;
   const nextAction = () => new Promise((r) => { waiter = r; });
   const emit = (a) => { const w = waiter; waiter = null; if (w) w(a); };
-  function setRec() { els.annRec.classList.toggle("on", mode === "recording" && (micListening || !!modeOpts.typing)); }
+  function setRec() { els.annRec.classList.toggle("on", mode === "recording" && (recorder.active() || micListening)); }
+  function setKey(btn, enabled, lit, label) { btn.disabled = !enabled; btn.classList.toggle("on", !!enabled && !!lit); if (label) btn.querySelector(".kl").textContent = label; }
   function setMode(m, o = {}) {
     mode = m; modeOpts = o;
     const rt = state.part === 4;
-    els.btnAnswer.querySelector(".kl").textContent = rt ? "SPEAK" : "ANSWER";
-    els.btnAnswer.disabled = !(m === "speaking" || m === "ready"); els.btnAnswer.classList.toggle("on", m === "ready");
-    els.btnStop.disabled = m !== "recording"; els.btnStop.classList.toggle("on", m === "recording");
-    els.btnReplay.disabled = !(m === "ready" && o.replay); els.btnReplay.classList.toggle("on", m === "ready" && !!o.replay);
-    els.btnReplay.querySelector(".kl").textContent = o.replayLabel || (rt ? "SAY AGAIN" : "REPLAY");
-    const defaults = { talk: "EXAMINER SPEAKING", speaking: rt ? "TRANSMISSION" : "EXAMINER SPEAKING", ready: rt ? "PRESS SPEAK TO TRANSMIT" : "PRESS ANSWER WHEN READY",
-      opening: "OPENING MICROPHONE…", recording: o.typing ? "TYPE YOUR ANSWER · PRESS STOP" : "RECORDING · PRESS STOP WHEN FINISHED", saving: "SAVING ANSWER…",
-      busy: "STAND BY", listen: "LISTENING TASK", error: "CONNECTION PROBLEM", idle: "STANDBY" };
+    setKey(els.btnRecord, m === "speaking" || m === "ready", m === "ready", "RECORD");
+    setKey(els.btnStop, m === "recording", true, "STOP");
+    setKey(els.btnReplay, (m === "ready" || m === "review") && !!o.replay, false, o.replayLabel || (rt ? "SAY AGAIN" : "REPLAY Q"));
+    setKey(els.btnPlay, m === "review" && !!o.hasAudio, true, o.playing ? "STOP PLAY" : "PLAYBACK");
+    setKey(els.btnRerecord, m === "review" && !o.typed, false, "RE-RECORD");
+    setKey(els.btnSave, m === "review" || m === "typing", true, "SAVE ANSWER");
+    const defaults = { talk: "EXAMINER SPEAKING", speaking: rt ? "TRANSMISSION" : "EXAMINER SPEAKING", ready: "PRESS RECORD WHEN READY",
+      opening: "OPENING MICROPHONE…", recording: "RECORDING · PRESS STOP WHEN FINISHED", typing: "TYPE YOUR ANSWER · PRESS SAVE ANSWER",
+      review: "LISTEN BACK, RE-RECORD OR SAVE ANSWER", saving: "SAVING ANSWER…", busy: "STAND BY", listen: "LISTENING TASK", error: "CONNECTION PROBLEM", idle: "STANDBY" };
     els.status.textContent = o.status || defaults[m] || "";
-    els.status.className = "status " + (m === "recording" ? "rec" : m === "ready" ? "ready" : m === "busy" || m === "error" ? "busy" : "");
+    els.status.className = "status " + (m === "recording" ? "rec" : m === "ready" || m === "review" ? "ready" : m === "busy" || m === "error" ? "busy" : "");
     els.pbar.className = "bar" + (m === "recording" ? " rec" : "");
     if (m !== "recording") { els.ptimer.textContent = o.timer || ""; els.ptimer.classList.remove("over"); els.pbarI.style.width = (o.progress || 0) + "%"; }
-    els.live.hidden = !(m === "recording" || m === "saving") || !!o.typing;
-    els.typed.hidden = !(m === "recording" && o.typing);
+    els.live.hidden = !(o.liveText && (m === "recording" || m === "saving"));
+    els.vu.hidden = !(m === "recording" && o.levels);
+    els.typed.hidden = m !== "typing";
+    els.review.hidden = !(m === "review" || (m === "saving" && o.keepReview));
     setRec();
   }
   async function offerRetry(e) {
@@ -856,9 +1056,9 @@ Return ONLY JSON: {"callsign":"as spoken","aircraft":"type","aerodrome":"locatio
   function notesView(L) { const n = state.notes[L]; if (!n) return null; const d = el("details"); d.open = true; d.append(el("summary", "label", "Your notes"), el("p", "note", n)); return d; }
   function metaLine(a) {
     if (a.mode === "typed") return `typed (voice unavailable) · ${a.words} words · ${fmt(a.dur)}`;
-    if (!a.words) return `no speech recorded · ${fmt(a.dur)}`;
+    if (!a.words) return a.audio ? `audio recorded, no transcript · ${fmt(a.dur)}` : `no speech recorded · ${fmt(a.dur)}`;
     return [`${fmt(a.dur)} of ~${fmt(a.soft)}`, `${a.words} words`, a.wpm ? `${a.wpm} wpm` : "", a.delay != null ? `first word after ${a.delay}s` : "",
-      a.replays ? `${a.replays} replay(s)` : "", a.overtime ? "over time" : "", a.capped ? "stopped at time cap" : ""].filter(Boolean).join(" · ");
+      a.replays ? `${a.replays} replay(s)` : "", a.takes > 1 ? `${a.takes} takes` : "", a.audio ? "audio recorded" : "", a.overtime ? "over time" : "", a.capped ? "stopped at time cap" : ""].filter(Boolean).join(" · ");
   }
   function logAnswer(a) {
     const it = el("div", "log-item");
@@ -866,14 +1066,15 @@ Return ONLY JSON: {"callsign":"as spoken","aircraft":"type","aerodrome":"locatio
     els.log.appendChild(it);
   }
 
-  // ================================================================== ask: speak the question → wait for ANSWER → record → STOP
+  // ================================================================== ask: speak → RECORD → STOP → (PLAYBACK / RE-RECORD) → SAVE ANSWER
+  // Nothing is submitted when recording stops: the candidate reviews the take and decides.
   async function ask(o) {
     const chk = live();
     const prior = state.answers.find((a) => a.key === o.key);
     if (prior) return prior;
     if (o.render) o.render();
     else stage(el("div", "eyebrow", o.eyebrow), el("div", "qtext", o.prompt), o.pics ? pics(o.pics) : null, o.notesOf ? notesView(o.notesOf) : null);
-    let replays = 0, readyAt = 0;
+    let replays = 0, readyAt = 0, readyDelay = null, takes = 0, take = null;
     const speakIt = async () => {
       setMode("speaking", { status: o.speakStatus });
       const sp = speakLines(o.lines || [{ speaker: "EXAMINER", text: o.prompt }]);
@@ -885,85 +1086,165 @@ Return ONLY JSON: {"callsign":"as spoken","aircraft":"type","aerodrome":"locatio
     for (;;) {
       if (act === "spoken" || act === "silent") {
         readyAt = readyAt || Date.now();
-        setMode("ready", { replay: true, replayLabel: o.replayLabel, status: act === "silent" ? "READ THE QUESTION · PRESS " + (state.part === 4 ? "SPEAK" : "ANSWER") : undefined });
+        if (take) { act = await reviewWait(o, take); continue; } // replayed the question during review: back to the same take
+        setMode("ready", { replay: true, replayLabel: o.replayLabel, status: act === "silent" ? "READ THE QUESTION · PRESS RECORD" : undefined });
         act = await nextAction(); chk();
         continue;
       }
       if (act === "replay") { replays++; act = await speakIt(); continue; }
-      if (act === "answer" || act === "type") {
-        const res = await record(o, act === "type", { replays, readyDelay: readyAt ? (Date.now() - readyAt) / 1000 : 0 });
-        if (res) { state.answers.push(res); persist(); logAnswer(res); return res; }
-        act = "spoken"; // microphone failed: back to waiting for ANSWER
+      if (act === "record" || act === "type") {
+        if (readyDelay === null) readyDelay = readyAt ? (Date.now() - readyAt) / 1000 : 0;
+        player.stop();
+        const t = await capture(o, act === "type");
+        if (!t) { act = take ? "keep" : "spoken"; continue; } // microphone failed: back to waiting
+        take = t; takes++;
+        act = take.typing ? "save" : await reviewWait(o, take);
+        continue;
+      }
+      if (act === "keep") { act = await reviewWait(o, take); continue; }
+      if (act === "save" && take) {
+        const res = await saveTake(o, take, { replays, readyDelay: readyDelay || 0, takes });
+        if (res) { hideHelp(); state.answers.push(res); persist(); logAnswer(res); return res; }
+        act = take.typing ? "type" : await reviewWait(o, take); // transcription failed: stay on the take
         continue;
       }
       act = await nextAction(); chk();
     }
   }
 
-  async function record(o, typing, extra) {
+  async function capture(o, typing) {
     const chk = live();
+    let media = false, dict = false;
     if (!typing) {
       setMode("opening");
-      const t0 = Date.now();
-      while (!micListening) {
-        await wait(150);
-        if (micFailed || !dictation) { showHelp(micFailed); return null; }
-        if (Date.now() - t0 > 20000) { micFailed = "upstream_error"; showHelp(micFailed); return null; }
+      if (pendingRec) {
+        const r = await pendingRec; pendingRec = null; chk();
+        if (r.error) noteMediaFailure(r.error); else media = true;
       }
-      hideHelp();
+      if (dictation) {
+        const t0 = Date.now();
+        while (!micListening && !micFailed && dictation && Date.now() - t0 < 20000) await wait(120);
+        dict = micListening;
+      }
+      if (!media && !dict) { recorder.cancel(); showHelp(dictation || micFailed ? micFailed || mediaErr : mediaErr || voiceMissing); return null; }
+      if (!media && dict && mediaErr && !mediaNoticeShown) { // tell once that this frame records text only
+        mediaNoticeShown = true; showHelp(mediaErr);
+        els.helpTitle.textContent = "Recording without playback";
+        els.helpReason.textContent = (HELP[mediaErr] || "") + " Your speech is still transcribed live by Claude dictation.";
+      } else if (media || !mediaNoticeShown) hideHelp();
     }
     buf = ""; partial = ""; firstWordAt = 0; lastWordAt = 0; renderLive();
     els.typed.value = "";
     capturing = true;
     const soft = o.soft || 45, cap = soft * 2 + 60, start = Date.now();
-    setMode("recording", { typing });
+    setMode(typing ? "typing" : "recording", { liveText: dict, levels: media });
     if (typing) setTimeout(() => els.typed.focus({ preventScroll: true }), 0);
     let capped = false;
     const tick = () => {
-      const e = (Date.now() - start) / 1000, left = soft - e;
-      els.ptimer.textContent = left >= 0 ? fmt(left) : "+" + fmt(-left);
-      els.ptimer.classList.toggle("over", left < 0);
+      const e = (Date.now() - start) / 1000;
+      els.ptimer.textContent = fmt(e) + " / " + fmt(soft);
+      els.ptimer.classList.toggle("over", e > soft);
       els.pbarI.style.width = Math.min(100, (e / soft) * 100) + "%";
-      const dropped = !typing && !micListening;
-      els.btnAnswer.disabled = !dropped; // lets the candidate reopen a microphone that dropped
-      els.btnAnswer.querySelector(".kl").textContent = dropped ? "MIC ON" : state.part === 4 ? "SPEAK" : "ANSWER";
-      if (dropped) els.status.textContent = "MICROPHONE STOPPED · PRESS MIC ON OR STOP";
-      else if (!typing) els.status.textContent = "RECORDING · PRESS STOP WHEN FINISHED";
-      setRec();
-      if (e >= cap) { capped = true; emit("stop"); }
+      if (!typing) {
+        const dropped = (media && !recorder.active()) || (!media && dict && !micListening);
+        if (dropped && !media) { setKey(els.btnRecord, true, true, "MIC ON"); els.status.textContent = "MICROPHONE STOPPED · PRESS MIC ON OR STOP"; }
+        else if (mode === "recording") { setKey(els.btnRecord, false, false, "RECORD"); els.status.textContent = e > soft ? "SUGGESTED TIME REACHED · FINISH AND PRESS STOP" : "RECORDING · PRESS STOP WHEN FINISHED"; }
+        setRec();
+      }
+      if (e >= cap) { capped = true; emit(typing ? "save" : "stop"); }
     };
     clearInterval(recTimer); recTimer = setInterval(tick, 250); tick();
     let a;
-    do { a = await nextAction(); chk(); } while (a !== "stop");
+    do { a = await nextAction(); chk(); } while (typing ? a !== "save" : a !== "stop");
     clearInterval(recTimer);
-    setMode("saving");
-    if (!typing && dictation) await Promise.race([dictation.stop().catch(() => {}), sleep(4000)]); // resolves once the last words are in
+    setMode("saving", { status: "FINISHING RECORDING…" });
+    let rec = null;
+    if (media) rec = await recorder.stop();
+    if (dict && dictation) await Promise.race([dictation.stop().catch(() => {}), sleep(4000)]); // resolves once the last words are in
     capturing = false;
     chk();
     const end = Date.now();
-    const text = (typing ? els.typed.value : buf + (partial ? " " + partial : "")).replace(/\s+/g, " ").trim();
+    const text = (typing ? els.typed.value : dict ? buf + (partial ? " " + partial : "") : "").replace(/\s+/g, " ").trim();
     buf = ""; partial = ""; renderLive();
-    const words = countWords(text);
-    const speakSecs = firstWordAt && lastWordAt > firstWordAt ? (lastWordAt - firstWordAt) / 1000 : 0;
-    const dur = (end - start) / 1000;
+    const take = {
+      id: o.key + ":" + end, typing, media: !!(rec && rec.blob && rec.blob.size), dict, blob: rec && rec.blob && rec.blob.size ? rec.blob : null, mime: rec ? rec.mime : "",
+      text, soft, capped, dur: (end - start) / 1000,
+      first: rec && rec.first != null ? rec.first : firstWordAt ? (firstWordAt - start) / 1000 : null,
+      speak: rec && rec.speak ? rec.speak : firstWordAt && lastWordAt > firstWordAt ? (lastWordAt - firstWordAt) / 1000 : 0,
+      stt: { state: "none" }, sttP: null,
+    };
+    if (take.blob && !dict && stt) startTranscription(o, take);
+    return take;
+  }
+
+  function startTranscription(o, take) {
+    take.stt = { state: "running" };
+    take.sttP = stt.transcribe(take.blob, { prompt: sttPrompt(o) }).then(
+      (r) => { take.text = String((r && r.text) || "").replace(/\s+/g, " ").trim(); take.stt = { state: "done" }; if (mode === "review") renderReview(take); },
+      (e) => { take.stt = { state: "error", code: (e && e.code) || "error", message: (e && e.message) || "" }; if (mode === "review") renderReview(take); });
+  }
+
+  function renderReview(take) {
+    const playing = player.playing(take.id);
+    els.rvDur.textContent = playing ? "▶ " + fmt(player.time()) + " / " + fmt(take.dur) : fmt(take.dur) + " recorded";
+    els.rvInfo.textContent = take.blob ? `${take.mime.split(";")[0]} · ${Math.max(1, Math.round(take.blob.size / 1024))} kB` : take.dict ? "transcribed live · no audio file here" : "";
+    els.rvText.className = "rv-text";
+    if (take.dict) { els.rvText.textContent = take.text ? "Recognised: “" + take.text + "”" : "No words were recognised. You can re-record."; if (!take.text) els.rvText.classList.add("muted"); }
+    else if (!stt) { els.rvText.textContent = "Speech-to-text is not configured on the server, so this recording will be saved without text."; els.rvText.classList.add("muted"); }
+    else if (take.stt.state === "running") { els.rvText.textContent = "Transcribing…"; els.rvText.classList.add("muted"); }
+    else if (take.stt.state === "done") { els.rvText.textContent = take.text ? "Recognised: “" + take.text + "”" : "No words were recognised. You can re-record."; if (!take.text) els.rvText.classList.add("muted"); }
+    else if (take.stt.state === "error") { els.rvText.textContent = "Transcription failed (" + take.stt.code + "). Press SAVE ANSWER to try again, or RE-RECORD."; els.rvText.classList.add("err"); }
+  }
+
+  let currentTake = null;
+  async function reviewWait(o, take) {
+    const chk = live();
+    currentTake = take;
+    const opts = () => ({ replay: o.replay !== false, replayLabel: o.replayLabel, hasAudio: !!take.blob, playing: player.playing(take.id), typed: take.typing });
+    for (;;) {
+      renderReview(take);
+      setMode("review", opts());
+      const a = await nextAction(); chk();
+      if (a === "play-ui") continue; // playback started/stopped in the click handler
+      player.stop();
+      if (a === "save" || a === "record" || a === "replay" || a === "type") { currentTake = null; return a; }
+    }
+  }
+
+  async function saveTake(o, take, extra) {
+    const chk = live();
+    if (take.blob && !take.dict && stt) {
+      if (!take.sttP || take.stt.state === "error") startTranscription(o, take);
+      setMode("saving", { status: "TRANSCRIBING YOUR ANSWER…", keepReview: true });
+      renderReview(take);
+      await take.sttP; chk();
+      if (take.stt.state === "error") return null;
+    }
+    setMode("saving", { status: "SAVING ANSWER…", keepReview: true });
+    let stored = false;
+    if (take.blob) stored = await audioDB.put(state.examId + ":" + o.key, { blob: take.blob, mime: take.mime, dur: take.dur, prompt: o.prompt });
+    chk();
+    const words = countWords(take.text);
     return {
-      key: o.key, part: state.part, stage: o.stage, prompt: o.prompt, text, mode: typing ? "typed" : "voice", soft, dur: Math.round(dur), words,
-      wpm: !typing && speakSecs > 4 ? Math.round(words / (speakSecs / 60)) : null,
-      delay: !typing && firstWordAt ? +((firstWordAt - start) / 1000).toFixed(1) : null,
-      replays: extra.replays, readyDelay: +extra.readyDelay.toFixed(1), overtime: dur > soft + 5, capped,
+      key: o.key, part: state.part, stage: o.stage, prompt: o.prompt, text: take.text, mode: take.typing ? "typed" : "voice",
+      engine: take.typing ? "typed" : take.media && take.dict ? "recorder+dictation" : take.media ? "recorder" : "dictation",
+      audio: stored, mime: take.mime, soft: take.soft, dur: Math.round(take.dur), words,
+      wpm: !take.typing && take.speak > 4 && words ? Math.round(words / (take.speak / 60)) : null,
+      delay: !take.typing && take.first != null ? +take.first.toFixed(1) : null,
+      replays: extra.replays, readyDelay: +(+extra.readyDelay).toFixed(1), takes: extra.takes, overtime: take.dur > take.soft + 5, capped: take.capped,
     };
   }
 
   // ================================================================== parts
   const PART_INTRO = {
     1: () => (cfg().mode === "full"
-      ? "Good day. This is the ELPAT speaking examination. It has four parts and takes about thirty minutes. Part one is a warm-up. I will ask you some questions about yourself and your work. When you are ready to answer, press ANSWER, and press STOP when you have finished."
-      : "Good day. This is Part one, the warm-up. I will ask you some questions about yourself and your work. When you are ready to answer, press ANSWER, and press STOP when you have finished."),
-    2: () => "Part two. Pictures and discussion. I will show you a picture to describe. Then you will compare it with a second picture. After that you will ask me three questions, and we will discuss the topic. Press ANSWER to begin each answer and STOP when you have finished.",
+      ? "Good day. This is the ELPAT speaking examination. It has four parts and takes about thirty minutes. Part one is a warm-up. I will ask you some questions about yourself and your work. When you are ready to answer, press RECORD. Press STOP when you have finished, and SAVE ANSWER to submit it."
+      : "Good day. This is Part one, the warm-up. I will ask you some questions about yourself and your work. When you are ready to answer, press RECORD. Press STOP when you have finished, and SAVE ANSWER to submit it."),
+    2: () => "Part two. Pictures and discussion. I will show you a picture to describe. Then you will compare it with a second picture. After that you will ask me three questions, and we will discuss the topic. Press RECORD to begin each answer, STOP when you have finished, and SAVE ANSWER to submit it.",
     3: () => "Part three. Listening comprehension. You will hear two recordings. You may listen to each recording a maximum of two times, and you may take notes. After each recording I will ask you some questions.",
     4: () => { const b = state.content.rtBrief || {}; return atco()
-      ? `Part four. Radiotelephony role-play. You are the controller on ${b.frequency || "the frequency"}. I will play the pilots. Respond to their calls and deal with any situation that develops. Cue cards will tell you what you see. Press SPEAK to transmit and STOP at the end of each transmission.`
-      : `Part four. Radiotelephony role-play. You are the pilot of ${b.callsign || "your aircraft"}. I will be the air traffic controller. Respond to my transmissions and make any calls the situation requires. Cue cards will tell you about events on board. Press SPEAK to transmit and STOP at the end of each transmission.`; },
+      ? `Part four. Radiotelephony role-play. You are the controller on ${b.frequency || "the frequency"}. I will play the pilots. Respond to their calls and deal with any situation that develops. Cue cards will tell you what you see. Press RECORD to transmit, STOP at the end of each transmission, then SAVE ANSWER.`
+      : `Part four. Radiotelephony role-play. You are the pilot of ${b.callsign || "your aircraft"}. I will be the air traffic controller. Respond to my transmissions and make any calls the situation requires. Cue cards will tell you about events on board. Press RECORD to transmit, STOP at the end of each transmission, then SAVE ANSWER.`; },
   };
   async function enterPart(p) {
     state.part = p;
@@ -971,7 +1252,7 @@ Return ONLY JSON: {"callsign":"as spoken","aircraft":"type","aerodrome":"locatio
     persist(); renderSigns();
     if (p === 4) { setMode("busy", { status: "PREPARING THE SCENARIO…" }); stage(el("div", "eyebrow", "Part 4"), el("p", "sub", "Preparing the radio scenario…")); await cached("rtBrief", genRtBrief); }
     await stepOnce("intro" + p, async () => {
-      stage(el("div", "eyebrow", `Part ${p} of 4`), el("div", "qtext", PARTS[p - 1].title), el("p", "sub", PART_INTRO[p]()));
+      stage(el("div", "eyebrow", `Part ${p} of 4`), el("div", "qtext", PARTS[p - 1].title), el("p", "sub", PART_INTRO[p]().replace(/press ANSWER/g, "press RECORD").replace(/Press ANSWER/g, "Press RECORD").replace(/Press SPEAK/g, "Press RECORD").replace(/press STOP when you have finished/g, "press STOP, then SAVE ANSWER")));
       setMode("talk");
       await speakLines([{ speaker: "EXAMINER", text: PART_INTRO[p]() }]);
       await wait(500);
@@ -1193,7 +1474,7 @@ Return ONLY JSON: {"check":{"expected":"...","ok":true,"issues":["..."]},"stage"
     const rtc = state.rt.checks.map((c, i) => `${i + 1}. ${c.ai ? aiSpeaker() + ": " + c.ai : "CUE: " + c.cue} | CANDIDATE: ${c.said || "(none)"} | EXPECTED: ${c.expected} | ${c.ok ? "OK" : "NOT OK"}${c.issues.length ? " | ISSUES: " + c.issues.join("; ") : ""}`).join("\n");
     return `You are a certified ICAO language proficiency rater (ICAO Doc 9835 rating scale) assessing ${scope} of an ELPAT exam.
 ${profile()}
-How the answers were captured: spoken answers were converted by automatic speech-to-text. Fillers are mostly dropped; an odd or wrong word that sounds like a plausible intended word may indicate a pronunciation problem. Each answer has measurements: duration against the suggested time, words, words per minute, delay before the first word, replays requested, over-time. Typed answers mean voice was unavailable: do not rate pronunciation or fluency from them, and say so.
+How the answers were captured: spoken answers were recorded from the microphone and converted by automatic speech-to-text. Fillers are mostly dropped; an odd or wrong word that sounds like a plausible intended word may indicate a pronunciation problem. Each answer has measurements: duration against the suggested time, words, words per minute, delay before the first word, replays requested, over-time. Typed answers mean voice was unavailable: do not rate pronunciation or fluency from them, and say so.
 Rate each criterion 1–6 with the ICAO holistic descriptors (Pronunciation, Structure, Vocabulary, Fluency, Comprehension, Interactions). Comprehension uses the listening answers against the key and the RT readbacks; Interactions uses the RT role-play, the candidate's questions in Part 2 and the discussion. The overall level is the LOWEST criterion level.
 ${lang}
 
@@ -1290,12 +1571,39 @@ At most 10 grammar items, 8 phraseology items and 12 vocabulary items. Quote onl
       tr.appendChild(d);
     });
     const d2 = el("details"); d2.appendChild(el("summary", "label", "Your answers")); const ll = el("div", "log-list");
-    state.answers.forEach((a) => { const it = el("div", "log-item"); it.append(el("div", "meta", `PART ${a.part} · ${String(a.stage).toUpperCase()} · ${metaLine(a)}`), el("div", null, "Q: " + a.prompt), el("div", null, "A: " + (a.text || "(no answer)"))); ll.appendChild(it); });
+    state.answers.forEach((a) => {
+      const it = el("div", "log-item");
+      it.append(el("div", "meta", `PART ${a.part} · ${String(a.stage).toUpperCase()} · ${metaLine(a)}`), el("div", null, "Q: " + a.prompt), el("div", null, "A: " + (a.text || "(no answer)")));
+      if (a.audio) it.appendChild(recordingControls(a));
+      ll.appendChild(it);
+    });
+    d2.open = state.answers.some((a) => a.audio);
     d2.appendChild(ll); tr.appendChild(d2); v.appendChild(tr);
     const actions = el("div", "row"), save = el("button", "btn", "Save report"), again = el("button", "btn ghost", "New exam");
     save.hidden = !downloads; save.addEventListener("click", saveReport); again.addEventListener("click", () => { clearStore(); resetToStart(); });
     actions.append(save, again); v.appendChild(actions);
     els.scroll.scrollTop = 0;
+  }
+  // per-answer playback (and download in the standalone app) of the recordings kept in IndexedDB
+  function recordingControls(a) {
+    const row = el("div", "row"), play = el("button", "btn ghost small", "▶ Play recording"), dl = el("button", "btn ghost small", "Download");
+    const id = "res:" + a.key;
+    play.addEventListener("click", async () => {
+      if (player.playing(id)) { player.stop(); return; }
+      const rec = await audioDB.get(state.examId + ":" + a.key);
+      if (!rec || !rec.blob) { play.textContent = "Recording not found in this browser"; play.disabled = true; return; }
+      player.play(rec.blob, id, () => { play.textContent = player.playing(id) ? "■ Stop" : "▶ Play recording"; });
+    });
+    dl.addEventListener("click", async () => {
+      const rec = await audioDB.get(state.examId + ":" + a.key); if (!rec || !rec.blob) return;
+      const ext = /mp4|aac/.test(rec.mime) ? "m4a" : /ogg/.test(rec.mime) ? "ogg" : "webm";
+      const name = `elpat-${a.key}.${ext}`;
+      if (downloads) { try { await downloads.save({ filename: name, data: rec.blob }); } catch {} return; }
+      const link = document.createElement("a"); link.href = URL.createObjectURL(rec.blob); link.download = name; document.body.appendChild(link); link.click();
+      setTimeout(() => { URL.revokeObjectURL(link.href); link.remove(); }, 1000);
+    });
+    row.append(play, dl);
+    return row;
   }
   async function saveReport() {
     if (!downloads) return;
@@ -1361,6 +1669,7 @@ At most 10 grammar items, 8 phraseology items and 12 vocabulary items. Quote onl
     emit("abort"); if (retryResolve) { const r = retryResolve; retryResolve = null; r(); }
     clearInterval(recTimer); clearInterval(clock); capturing = false;
     stopSpeech(); if (dictation && micLive) dictation.stop().catch(() => {});
+    recorder.cancel(); player.stop(); pendingRec = null; currentTake = null;
     state = fresh();
     els.vExam.hidden = true; els.vResult.hidden = true; els.pedestal.hidden = true; els.vStart.hidden = false;
     hideHelp(); els.errbox.hidden = true;
@@ -1384,11 +1693,15 @@ At most 10 grammar items, 8 phraseology items and 12 vocabulary items. Quote onl
   els.btnStart.addEventListener("click", () => {
     if (!sample) { els.wClaude.hidden = false; return; }
     fx.unlock();
+    if (STANDALONE && mediaUsable() && navigator.mediaDevices) navigator.mediaDevices.getUserMedia({ audio: true }).then((st) => { st.getTracks().forEach((t) => t.stop()); mediaState = "ok"; renderMicDiag(); }, (e) => { noteMediaFailure({ code: e && e.name === "NotAllowedError" ? "denied" : "unknown" }); }); // ask for permission up front in the standalone app
     try { if (synth) { const u = new SpeechSynthesisUtterance(" "); u.volume = 0; synth.speak(u); } } catch {}
     resetToStart();
     state.cfg = { role: els.roleAtco.getAttribute("aria-pressed") === "true" ? "ATCO" : "Pilot", aircraft: els.cfgAircraft.value.trim().slice(0, 60),
       mode: els.cfgMode.value, noise: els.cfgNoise.value, lang: els.cfgLang.value, pics: els.cfgPics.value === "photos" && !pairs.length ? "builtin" : els.cfgPics.value };
-    state.startedAt = Date.now(); persist();
+    state.startedAt = Date.now();
+    state.examId = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    audioDB.clear(); // keep only the current exam's recordings in this browser
+    persist();
     runExam();
   });
   els.btnResume.addEventListener("click", () => {
@@ -1398,18 +1711,34 @@ At most 10 grammar items, 8 phraseology items and 12 vocabulary items. Quote onl
     if (state.finished && state.result) { showResults(); return; }
     runExam();
   });
-  els.btnAnswer.addEventListener("click", () => {
-    if (mode === "recording") { if (dictation && !micListening && !modeOpts.typing) micOnFromGesture(); return; }
+  // RECORD / RE-RECORD start capture synchronously inside the click (browsers and the platform require a user gesture).
+  els.btnRecord.addEventListener("click", () => {
+    if (mode === "recording") { if (dictation && !micListening && !recorder.active()) micOnFromGesture(); return; }
     if (!(mode === "speaking" || mode === "ready")) return;
-    if (!dictation) { showHelp("missing"); return; }
+    if (!canCapture()) { showHelp(mediaErr || voiceMissing); return; }
     hideHelp();
-    micOnFromGesture(); // synchronous, first thing in the click: the microphone may only open from a tap
+    beginCaptureFromGesture();
     stopSpeech();
-    emit("answer");
+    emit("record");
+  });
+  els.btnRerecord.addEventListener("click", () => {
+    if (mode !== "review") return;
+    if (!canCapture()) { showHelp(mediaErr || voiceMissing); return; }
+    player.stop(); hideHelp();
+    beginCaptureFromGesture();
+    emit("record");
   });
   els.btnStop.addEventListener("click", () => { if (mode === "recording") emit("stop"); });
-  els.btnReplay.addEventListener("click", () => { if (mode === "ready") { fx.unlock(); emit("replay"); } });
-  els.btnType.addEventListener("click", () => { if (!(mode === "speaking" || mode === "ready")) return; hideHelp(); stopSpeech(); emit("type"); });
+  els.btnReplay.addEventListener("click", () => { if (mode === "ready" || mode === "review") { fx.unlock(); player.stop(); emit("replay"); } });
+  els.btnPlay.addEventListener("click", () => {
+    if (mode !== "review" || !currentTake || !currentTake.blob) return;
+    const t = currentTake;
+    if (player.playing(t.id)) player.stop();
+    else { stopSpeech(); player.play(t.blob, t.id, () => { if (mode === "review" && currentTake === t) { renderReview(t); setKey(els.btnPlay, true, true, player.playing(t.id) ? "STOP PLAY" : "PLAYBACK"); } }); }
+    emit("play-ui");
+  });
+  els.btnSave.addEventListener("click", () => { if (mode === "review" || mode === "typing") { player.stop(); emit("save"); } });
+  els.btnType.addEventListener("click", () => { if (!(mode === "speaking" || mode === "ready" || mode === "review")) return; hideHelp(); stopSpeech(); player.stop(); emit("type"); });
   els.btnRetry.addEventListener("click", () => { if (retryResolve) { const r = retryResolve; retryResolve = null; r(); } });
   els.btnCopy.addEventListener("click", () => {
     const sel = () => { try { const r = document.createRange(); r.selectNodeContents(els.helpUrl); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } catch {} };
@@ -1419,30 +1748,56 @@ At most 10 grammar items, 8 phraseology items and 12 vocabulary items. Quote onl
   els.btnNew.addEventListener("click", () => { els.btnNew.hidden = true; els.btnNewConfirm.hidden = false; setTimeout(() => { els.btnNewConfirm.hidden = true; els.btnNew.hidden = false; }, 4000); });
   els.btnNewConfirm.addEventListener("click", () => { els.btnNewConfirm.hidden = true; els.btnNew.hidden = false; resetToStart(); });
 
-  // sound check: microphone + speech-to-text, then examiner voice and ATC voice with radio noise
+  // sound check: record 3 s with MediaRecorder and play it back; Claude dictation test; examiner + ATC voices with radio noise
   els.btnCheck.addEventListener("click", () => {
-    const micP = dictation ? micOnFromGesture() : Promise.resolve();
+    const recP = mediaUsable() ? recorder.start(() => {}).then(() => ({ ok: true }), (e) => ({ error: e })) : null; // inside the click
+    const dictP = !recP && dictation ? micOnFromGesture() : null;
     fx.unlock(); fx.setLevel(+els.cfgNoise.value || 0.5);
     els.btnCheck.disabled = true; els.checkOut.hidden = false; els.checkOut.innerHTML = "";
     const line = (ok, label, detail) => { const li = el("li"); li.append(el("b", ok === null ? "wait" : ok ? "ok" : "no", ok === null ? "…" : ok ? "OK" : "NO"), el("span", null, label + ": " + detail)); els.checkOut.appendChild(li); return li; };
     (async () => {
       try {
-        line(!!sample, "Claude examiner", sample ? "connected" : "not connected (sign in on claude.ai)");
-        line(!!tts || !!synth, "Voice output", tts ? "Claude voices available" : synth ? "phone voice only" : "not available in this app");
-        await micP;
-        if (dictation && micListening) {
-          capturing = true; buf = ""; partial = "";
-          const wait1 = line(null, "Speak now", "say “Tower, Helicopter two one five, ready for departure”");
-          await sleep(6000);
-          capturing = false;
-          const got = (buf + " " + partial).trim(); buf = ""; partial = "";
-          await dictation.stop().catch(() => {});
-          wait1.remove();
-          line(!!got, "Microphone and speech-to-text", got ? "heard “" + got + "”" : "no words heard");
-        } else line(false, "Microphone", dictation ? HELP[micFailed] || micFailed || "did not start" : HELP[voiceMissing]);
+        line(!!sample, "Claude examiner", sample ? "connected" : STANDALONE ? "server has no Claude API key" : "not connected (sign in on claude.ai)");
+        line(!!tts || !!synth, "Voice output", tts ? "Claude voices available" : synth ? "browser voice" : "not available in this app");
+        if (recP) {
+          const w = line(null, "Recording", "say “Tower, Helicopter two one five, ready for departure” (4 seconds)");
+          const r = await recP;
+          if (r.error) { w.remove(); noteMediaFailure(r.error); line(false, "MediaRecorder", HELP[r.error.code] || r.error.code); }
+          else {
+            await sleep(4000);
+            const rec = await recorder.stop();
+            w.remove();
+            const ok = !!(rec && rec.blob && rec.blob.size > 500);
+            mediaState = ok ? "ok" : mediaState;
+            line(ok, "MediaRecorder", ok ? `recorded ${rec.dur.toFixed(1)} s · ${rec.mime} · ${Math.round(rec.blob.size / 1024)} kB · playing it back now` : "no audio data was recorded");
+            if (ok) {
+              await new Promise((res) => { player.play(rec.blob, "check", () => { if (!player.playing("check")) res(); }); setTimeout(res, (rec.dur + 2) * 1000); });
+              if (stt) {
+                const t = line(null, "Speech-to-text", "transcribing…");
+                try { const out = await stt.transcribe(rec.blob, { prompt: sttPrompt({ prompt: "" }) }); t.remove(); line(!!(out && out.text), "Speech-to-text", out && out.text ? "heard “" + out.text + "”" : "no words recognised"); }
+                catch (e) { t.remove(); line(false, "Speech-to-text", (e && (e.message || e.code)) || "failed"); }
+              }
+            }
+          }
+        }
+        if (!recP || mediaState === "blocked") {
+          if (!dictP && dictation) micOnFromGesture(); // only valid inside the click; if not started, ask for a second tap
+          if (dictP) await dictP;
+          if (dictation && micListening) {
+            capturing = true; buf = ""; partial = "";
+            const w1 = line(null, "Speak now", "say “Tower, Helicopter two one five, ready for departure”");
+            await sleep(6000);
+            capturing = false;
+            const got = (buf + " " + partial).trim(); buf = ""; partial = "";
+            await dictation.stop().catch(() => {});
+            w1.remove();
+            line(!!got, "Claude dictation", got ? "heard “" + got + "”" : "no words heard");
+          } else if (dictation && recP) line(null, "Claude dictation", "press Sound check again to test dictation");
+          else line(false, "Speech-to-text", dictation ? HELP[micFailed] || micFailed || "did not start" : HELP[voiceMissing]);
+        }
         const played = await speakLines([{ speaker: "EXAMINER", text: "Sound check. This is the examiner." }, { speaker: "ATC", text: "Helicopter two one five, wind calm, cleared for take-off.", radio: true }]);
         line(played, "Voices and radio noise", played ? "examiner and ATC voices played with radio effects" : "no voice could play here");
-      } catch {} finally { els.btnCheck.disabled = false; }
+      } catch {} finally { els.btnCheck.disabled = false; renderMicDiag(); }
     })();
   });
 
@@ -1496,9 +1851,15 @@ Return ONLY JSON: {"theme":"short theme","notesA":"2–3 sentences: what is visi
   const saved = load();
   if (saved && saved.cfg && saved.startedAt) { els.btnResume.hidden = false; els.btnResume.textContent = saved.finished ? "Show last report" : "Resume exam"; }
   let capsSeen = 0;
-  const capDone = () => { if (++capsSeen === 2) { els.wClaude.hidden = !!sample; els.wVoice.hidden = !!dictation || !sample; } };
+  const capDone = () => {
+    if (++capsSeen < 3) return;
+    els.wClaude.hidden = !!sample;
+    els.wVoice.hidden = canCapture() || !sample;
+    renderMicDiag();
+  };
   use("sample").then((s) => { sample = s; if (s && s.limits) s.limits().then((l) => { imgLimits = (l && l.images) || null; }).catch(() => {}); capDone(); });
   use("dictation").then((d) => { dictation = d; if (d) bindDictation(); capDone(); });
+  use("stt").then((x) => { stt = x; capDone(); }); // provided only by the standalone server
   use("tts").then((t) => { tts = t; if (t) bindTts(); });
   use("downloads").then((d) => { downloads = d; });
   Promise.all([use("db"), use("user"), use("assets")]).then(async ([d, u, a]) => {

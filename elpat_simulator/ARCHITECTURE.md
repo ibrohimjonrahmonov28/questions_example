@@ -2,17 +2,25 @@
 
 The simulator runs a full ELPAT (English Language Proficiency Aviation Test) as a spoken, timed exam: four parts, one item at a time, voice answers, and an ICAO Doc 9835 rating at the end.
 
-There are two deployment targets:
+The same page (`index.html`) runs in three places:
 
-| | **A. claude.ai artifact** (`index.html`, live now) | **B. Standalone service** (design below, not built yet) |
-|---|---|---|
-| Who can use it | Anyone you share the link with who has a Claude account | Anyone, with your own accounts and billing |
-| Examiner and rating model | Claude, on the viewer's own account (`sample` capability) | Claude API with your key, called from the server |
-| Questions read aloud | Claude voices (`tts`), with the browser voice as a fallback | Neural TTS (Azure, ElevenLabs or Polly), cached |
-| Speech-to-text | Platform dictation from the real microphone | Whisper or Deepgram on the recorded audio |
-| Raw audio recording (MediaRecorder) | **Not available.** The artifact sandbox does not give pages the microphone stream. | Yes: Opus/WebM upload |
-| Background noise | Generated with Web Audio and played in sync with the voice | Mixed into one audio file with ffmpeg |
-| Pronunciation rating | Inferred from speech-to-text evidence | Phoneme-level scoring on the audio |
+| | **A. claude.ai artifact** (live) | **A′. Standalone HTTPS app** (`standalone/`, built) | **B. Scaled service** (design below) |
+|---|---|---|---|
+| Who can use it | People you share the link with who have a Claude account | Anyone with the URL, with an optional access code | Anyone, with accounts |
+| Examiner and rating | Claude on the viewer's account (`sample`) | Claude API through the Django proxy | Claude API from workers |
+| Recording (getUserMedia + MediaRecorder) | **Blocked by the artifact frame.** The page detects it and falls back to dictation | **Yes**: per-answer WebM/Opus or MP4/AAC, with PLAYBACK and RE-RECORD before SAVE ANSWER | Yes, uploaded to object storage |
+| Speech-to-text | Claude dictation (live) | Whisper or Deepgram on each recording | Whisper on a GPU pool plus phoneme-level scoring |
+| Recordings stored | – | In the candidate's browser (IndexedDB) | S3, with a retention policy |
+| Pronunciation rating | From speech-to-text evidence | From speech-to-text evidence | Acoustic |
+
+## Recording system (shared by A and A′)
+
+- **Controls:** RECORD, STOP, PLAYBACK, RE-RECORD, SAVE ANSWER, plus REPLAY Q (SAY AGAIN in Part 4). A take is never submitted on STOP: the candidate reviews it, can listen back and re-record, and submits with SAVE ANSWER.
+- **Capture:** `getUserMedia({audio: {echoCancellation, noiseSuppression, autoGainControl, channelCount: 1}})` starts inside the RECORD click. The format is the first one `MediaRecorder.isTypeSupported` accepts from `audio/webm;codecs=opus`, `audio/webm`, `audio/mp4`, `audio/aac`, `audio/ogg;codecs=opus`. Chunks are taken every second (`start(1000)`) so Android tab suspension does not lose data. An `AnalyserNode` drives the level meter and detects speech start and end for the fluency metrics.
+- **Release:** tracks are stopped after every take. On Android an open microphone puts audio in call mode and lowers the examiner's volume.
+- **Detection before and after the first attempt:** secure context, presence of `getUserMedia` and `MediaRecorder`, `document.permissionsPolicy.allowsFeature("microphone")`, the Permissions API state, and the error name (`NotAllowedError` in a frame → frame-blocked, `NotReadableError` → mic busy, `NotFoundError` → no device, `OverconstrainedError` → retry with `{audio: true}`). Each case shows a clear message, and the start screen has a diagnostics panel.
+- **Storage:** each saved answer's Blob goes to IndexedDB under `examId:questionKey`. The results page plays and downloads each one.
+- **Transcription:** in A′ the upload starts on STOP, so SAVE ANSWER is usually instant. If it fails, the take stays in review with a retry. In A, dictation runs alongside the recorder; if the recorder is blocked, the take is text-only.
 
 ---
 
@@ -65,16 +73,16 @@ flowchart LR
 
 ### Known limits of target A
 
-1. **No raw audio.** The sandbox refuses `getUserMedia`/MediaRecorder; dictation returns text only. Pronunciation is therefore rated from recognition evidence (mis-heard words), not acoustics.
+1. **No raw audio in the artifact.** The frame refuses `getUserMedia`/MediaRecorder, and dictation returns text only. The page detects this and says so. Use target A′ (`standalone/`) for real recordings.
 2. **Noise is synchronised, not baked in.** Claude voices play through the platform, so the Web Audio noise runs alongside the voice rather than in one file.
 3. **Claude mobile app:** no microphone and no Claude voices. Use Chrome. The page explains this and still works by typing.
 4. Ratings are **indicative**. They are not calibrated against certified raters.
 
 ---
 
-## B. Production architecture (standalone service with real recording)
+## B. Scaled production architecture (beyond `standalone/`)
 
-Build this when you need real audio files, acoustic pronunciation scoring, public access without Claude accounts, or institutional use.
+`standalone/` (A′) already gives you public access, real recordings and server-side transcription. Build B when you also need server-side audio storage, acoustic pronunciation scoring, candidate accounts and history, or institutional scale.
 
 ```mermaid
 flowchart LR
