@@ -139,6 +139,14 @@ button { cursor: pointer; }
 .tools .icon-btn { padding: 4px 9px; }
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--live); margin-right: 6px; vertical-align: 1px; }
 
+/* Voice help panel */
+.help { border: 1px solid var(--live); border-radius: 6px; padding: 10px 12px; background: var(--bg); display: grid; gap: 6px; font-size: 14px; }
+.help b { font-family: var(--font-display); font-size: 17px; letter-spacing: .03em; color: var(--live); }
+.help p { margin: 0; }
+.help .url { font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; user-select: all; }
+.help .icon-btn { padding: 5px 9px; }
+#tap-speak { min-width: 140px; font-size: 17px; padding: 14px 22px; }
+
 /* Exam pictures */
 .pics { display: grid; gap: 10px; margin: 10px 0 4px; }
 .pics.two { grid-template-columns: 1fr 1fr; }
@@ -238,6 +246,16 @@ button { cursor: pointer; }
     </div>
     <div class="bar"><i id="bar"></i></div>
     <div class="livebox" id="livebox" data-empty="Your words appear here while you speak."></div>
+    <div class="help" id="voice-help" hidden role="alert">
+      <b id="help-title">Voice recording is not available here</b>
+      <p id="help-reason"></p>
+      <p id="help-open">Open the exam in <b>Chrome</b> on your phone and sign in to claude.ai:<br><span class="url" id="help-url">https://claude.ai/artifact/1PHDiym9rbha53ewUVKzL5</span></p>
+      <div class="row">
+        <button type="button" class="icon-btn" id="copy-link">COPY LINK</button>
+        <button type="button" class="icon-btn" id="open-perms" hidden>OPEN PERMISSIONS</button>
+        <button type="button" class="icon-btn" id="type-instead">TYPE THIS ANSWER INSTEAD</button>
+      </div>
+    </div>
     <form id="form" hidden>
       <textarea id="answer" rows="2" placeholder="Type your answer…" aria-label="Your answer"></textarea>
     </form>
@@ -333,6 +351,8 @@ End EVERY reply with tags on their own last line:
     tapSpeak: $("tap-speak"), done: $("done"), skipPrep: $("skip-prep"),
     save: $("save"), restart: $("restart"), confirmRestart: $("confirm-restart"),
     check: $("check"), checkOut: $("check-out"),
+    voiceHelp: $("voice-help"), helpTitle: $("help-title"), helpReason: $("help-reason"), helpOpen: $("help-open"),
+    helpUrl: $("help-url"), copyLink: $("copy-link"), openPerms: $("open-perms"), typeInstead: $("type-instead"),
   };
 
   const fresh = () => ({ role: null, unit: "", prep: 5, pace: 1, messages: [], part: null, startedAt: null, finished: false, pictures: {}, briefs: {} });
@@ -506,7 +526,8 @@ Requirements:
     if (opts.doneLabel) els.done.textContent = opts.doneLabel;
     els.skipPrep.hidden = !opts.repeat;
     els.tapSpeak.hidden = !opts.tap;
-    if (opts.tapLabel && els.tapSpeak.textContent !== opts.tapLabel) els.tapSpeak.textContent = opts.tapLabel;
+    const tapLabel = opts.tapLabel || "Speak";
+    if (els.tapSpeak.textContent !== tapLabel) els.tapSpeak.textContent = tapLabel;
     els.form.hidden = !opts.typing;
     els.livebox.hidden = state.finished || (kind !== "speak" && !buf && !partial);
   }
@@ -547,13 +568,37 @@ Requirements:
   }
 
   // Must run synchronously inside a click handler.
+  let micFailed = null;
   function micOnFromGesture() {
     if (!dictation || micLive) return Promise.resolve();
+    micFailed = null; micStatus = "starting";
     return dictation.start().then(() => { micStatus = "listening"; }).catch((e) => {
-      micStatus = (e && e.code) || "upstream_error";
-      if (micStatus === "not_granted" || micStatus === "unavailable") { dictation = null; els.tapSpeak.hidden = true; if (capturing) els.form.hidden = false; }
+      const code = (e && e.code) || "upstream_error";
+      if (code === "stopped") return;
+      micStatus = code; micFailed = code;
+      if (code === "unavailable") { dictation = null; voiceMissing = "unavailable"; }
     });
   }
+
+  // ---------- "why can't I record?" panel ----------
+  let voiceMissing = "missing";
+  const HELP = {
+    missing: "This app does not let pages use the microphone. The Claude mobile app, Safari and Firefox do not support it; Chrome does.",
+    unavailable: "Speech recognition is not available for this account or browser language here.",
+    not_granted: "Microphone permission is off for this page. Tap OPEN PERMISSIONS and allow dictation (or allow the microphone for claude.ai in Chrome's site settings), then tap Speak again.",
+    dismissed: "The microphone question was closed. Tap Speak again and choose Allow.",
+    rate_limited: "The microphone is busy right now. Wait a few seconds, then tap Speak again.",
+    hidden: "The microphone stopped because the screen was switched off or the app was left. Tap Speak again.",
+  };
+  function showVoiceHelp(code) {
+    const missing = !dictation;
+    els.helpTitle.textContent = missing ? "Voice recording is not available here" : "The microphone did not start";
+    els.helpReason.textContent = HELP[missing ? voiceMissing : code] || "The microphone could not start. Tap Speak to try again.";
+    els.helpOpen.hidden = !missing;
+    els.openPerms.hidden = code !== "not_granted";
+    els.voiceHelp.hidden = false;
+  }
+  function hideVoiceHelp() { els.voiceHelp.hidden = true; }
 
   // ---------- examiner voice ----------
   // Browser speech synthesis does not compete with the open microphone; Claude's own voice (tts) does, so it is the fallback.
@@ -740,20 +785,39 @@ Requirements:
     runQuestion(text, id);
   }
 
-  // Sequence per question: examiner reads it aloud -> thinking countdown -> candidate presses SPEAK -> timed answer.
+  // Sequence per question. The SPEAK button is always shown while an answer is expected; if the microphone
+  // cannot be used, pressing it explains why and offers a typed answer instead.
   let speakWait = null, repeatNow = null, finishNow = null;
 
   function countdown(id, secs, label, opts) {
     const t0 = Date.now();
     return new Promise((resolve) => {
-      speakWait = () => resolve("speak");
+      speakWait = (mode) => resolve(mode);
       repeatNow = () => resolve("repeat");
       const step = () => {
         if (id !== runId) return resolve("abort");
         const left = secs - (Date.now() - t0) / 1000;
         if (left <= 0) return resolve("done");
-        setPhase("prep", label, Object.assign({ count: String(Math.ceil(left)), progress: 100 * (1 - left / secs) }, opts));
+        setPhase("prep", label, Object.assign({ count: String(Math.ceil(left)), progress: 100 * (1 - left / secs), tap: true }, opts));
         phaseTimer = setTimeout(step, 100);
+      };
+      step();
+    }).finally(() => { clearTimeout(phaseTimer); speakWait = null; repeatNow = null; });
+  }
+
+  // Waits for SPEAK (or "type instead"). Resolves "voice" | "type" | "repeat" | "abort".
+  function waitSpeak(id, label, opts = {}) {
+    const w0 = Date.now();
+    return new Promise((resolve) => {
+      speakWait = (mode) => resolve(mode);
+      repeatNow = opts.repeat ? () => resolve("repeat") : null;
+      const step = () => {
+        if (id !== runId) return resolve("abort");
+        setPhase(opts.urgent ? "speak" : "prep", label, {
+          tap: true, repeat: !!opts.repeat,
+          count: opts.countUp ? "+" + Math.floor((Date.now() - w0) / 1000) + "s" : "",
+        });
+        phaseTimer = setTimeout(step, 200);
       };
       step();
     }).finally(() => { clearTimeout(phaseTimer); speakWait = null; repeatNow = null; });
@@ -761,80 +825,85 @@ Requirements:
 
   async function runQuestion(text, id) {
     if (state.finished) { finishExam(); return; }
-    const typing = () => !dictation;
+    hideVoiceHelp();
     if (SELF_PACED.has(state.part)) {
-      if (typing()) return answerWindow(text, id, 0);
-      const r = await new Promise((resolve) => {
-        speakWait = () => resolve("speak");
-        const step = () => {
-          if (id !== runId) return resolve("abort");
-          if (!dictation) return resolve("speak");
-          const pic = state.part === "2A" && lastMatch(PIC_RE, text);
-          setPhase("prep", pic ? "Look at the picture. Press SPEAK when ready" : "Read the question. Press SPEAK when ready", { tap: true, tapLabel: "Speak" });
-          phaseTimer = setTimeout(step, 250);
-        };
-        step();
-      }).finally(() => { clearTimeout(phaseTimer); speakWait = null; });
+      const pic = state.part === "2A" && lastMatch(PIC_RE, text);
+      const r = await waitSpeak(id, pic ? "Look at the picture. Press SPEAK when ready" : "Read the question. Press SPEAK when ready");
       if (r === "abort") return;
-      return answerWindow(text, id, 0, true);
+      return answerWindow(text, id, { selfPaced: true, mode: r });
     }
     for (;;) {
-      setPhase("", "Examiner speaking", { tap: !typing(), tapLabel: "Press to speak" });
-      speakWait = () => { pressedEarly = true; };
-      let pressedEarly = false;
+      setPhase("", "Examiner speaking", { tap: true });
+      let early = null;
+      speakWait = (mode) => { early = mode; };
       const how = await say(text, id);
       speakWait = null;
       if (id !== runId) return;
-      if (pressedEarly) return answerWindow(text, id, 0);
+      if (early) return answerWindow(text, id, { mode: early });
       if (!how) {
         showVoiceWarning();
         const readSecs = Math.min(40, Math.max(5, words(spoken(text)) / 3.5));
-        const r = await countdown(id, readSecs, "Read the question", { tap: !typing(), tapLabel: "Press to speak" });
+        const r = await countdown(id, readSecs, "Read the question");
         if (r === "abort") return;
-        if (r === "speak") return answerWindow(text, id, 0);
+        if (r === "voice" || r === "type") return answerWindow(text, id, { mode: r });
       }
-      // Thinking time
-      const r = await countdown(id, state.prep, "Think", { tap: !typing(), tapLabel: "Press to speak", repeat: true });
+      const r = await countdown(id, state.prep, "Think", { repeat: true });
       if (r === "abort") return;
       if (r === "repeat") continue;
-      if (r === "speak") return answerWindow(text, id, 0);
+      if (r === "voice" || r === "type") return answerWindow(text, id, { mode: r });
       break;
     }
-    if (typing()) return answerWindow(text, id, 0);
-
-    // Wait for the SPEAK press; the delay is measured and reported.
     const w0 = Date.now();
-    const r = await new Promise((resolve) => {
-      speakWait = () => resolve("speak");
-      repeatNow = () => resolve("repeat");
-      const step = () => {
-        if (id !== runId) return resolve("abort");
-        if (!dictation) return resolve("speak");
-        setPhase("speak", "Press SPEAK", { count: "+" + Math.floor((Date.now() - w0) / 1000) + "s", tap: true, tapLabel: "Speak", repeat: true });
-        phaseTimer = setTimeout(step, 200);
-      };
-      step();
-    }).finally(() => { clearTimeout(phaseTimer); speakWait = null; repeatNow = null; });
+    const r = await waitSpeak(id, "Press SPEAK", { repeat: true, countUp: true, urgent: true });
     if (r === "abort") return;
     if (r === "repeat") return runQuestion(text, id);
-    return answerWindow(text, id, (Date.now() - w0) / 1000);
+    return answerWindow(text, id, { mode: r, pressDelay: (Date.now() - w0) / 1000 });
   }
 
-  // Called synchronously from the SPEAK button's click: the microphone may only open from a tap.
+  // Runs synchronously inside the SPEAK click: the microphone may only be opened from a tap.
   function pressSpeak() {
     if (!speakWait) return;
+    if (!dictation) { showVoiceHelp("missing"); return; }   // keep waiting; the panel offers "type instead"
+    hideVoiceHelp();
     micOnFromGesture();
     try { synth && synth.cancel(); } catch {}
     try { tts && tts.stop(); } catch {}
-    speakWait();
+    speakWait("voice");
   }
 
-  async function answerWindow(text, id, pressDelay, selfPaced) {
+  async function answerWindow(text, id, opts) {
+    const { selfPaced = false, pressDelay = 0 } = opts;
+    let mode = opts.mode === "type" ? "type" : "voice";
     const part = PARTS.find((p) => p.id === state.part) || PARTS[0];
     const asked = parseInt(lastMatch(TIME_RE, text) || "0", 10);
     const isPicture = state.part === "2A" && !!lastMatch(PIC_RE, text);
     const secs = isPicture ? PICTURE_SECS : Math.round(Math.min(150, Math.max(15, (asked || part.secs) * state.pace)));
-    let typing = !dictation;
+
+    if (mode === "voice") {
+      // The answer clock starts only once the microphone is really listening.
+      const t0 = Date.now();
+      const ok = await new Promise((resolve) => {
+        const step = () => {
+          if (id !== runId) return resolve(false);
+          if (micLive && micStatus === "listening") return resolve(true);
+          if (micFailed || !dictation) return resolve(false);
+          if (Date.now() - t0 > 20000) { micFailed = "upstream_error"; return resolve(false); }
+          setPhase("prep", "Opening microphone…", {});
+          phaseTimer = setTimeout(step, 150);
+        };
+        step();
+      });
+      clearTimeout(phaseTimer);
+      if (id !== runId) return;
+      if (!ok) {
+        showVoiceHelp(micFailed);
+        const r = await waitSpeak(id, "Microphone did not start. Tap Speak to try again", { urgent: true });
+        if (r === "abort") return;
+        return answerWindow(text, id, Object.assign({}, opts, { mode: r }));
+      }
+    }
+
+    const typing = mode === "type";
     buf = ""; partial = ""; firstWordAt = 0; lastWordAt = 0;
     els.answer.value = "";
     renderLive();
@@ -845,18 +914,18 @@ Requirements:
 
     await new Promise((resolve) => {
       finishNow = (r) => { reason = r; resolve(); };
-      speakWait = () => {};   // a tap on the mic button while answering only reopens the microphone
+      speakWait = () => {};   // SPEAK while answering only reopens a microphone that dropped
       const step = () => {
         if (id !== runId) return resolve();
-        typing = !dictation;
         const elapsed = (Date.now() - start) / 1000;
         const left = secs - elapsed;
         if (left <= 0) { reason = "time"; return resolve(); }
         const spokeSomething = typing ? els.answer.value.trim().length > 0 : !!(buf.trim() || partial);
         if (!typing && !isPicture && spokeSomething && lastWordAt && Date.now() - lastWordAt > SILENCE_MS) { reason = "silence"; return resolve(); }
-        setPhase("speak", typing ? "Type now" : micLive ? "Recording" : "Opening microphone…", {
+        const dropped = !typing && !micLive;
+        setPhase("speak", typing ? "Type now" : dropped ? "Microphone stopped" : "Recording", {
           count: fmt(left), progress: 100 * (elapsed / secs), done: true, doneLabel: "Stop and send",
-          tap: !typing && !micLive && micStatus !== "off" && micStatus !== "listening", tapLabel: "Turn the microphone back on", typing,
+          tap: dropped && !!dictation, tapLabel: "Turn the microphone back on", typing,
         });
         phaseTimer = setTimeout(step, 200);
       };
@@ -867,11 +936,9 @@ Requirements:
     if (id !== runId) { capturing = false; return; }
 
     setPhase("", "Saving answer…");
-    if (!typing && dictation) {
-      // stop() resolves once the last words have arrived.
-      await Promise.race([dictation.stop().catch(() => {}), sleep(4000)]);
-    }
+    if (!typing && dictation) await Promise.race([dictation.stop().catch(() => {}), sleep(4000)]);   // resolves after the last words
     capturing = false;
+    hideVoiceHelp();
     const answerText = (typing ? els.answer.value : (buf + (partial ? " " + partial : ""))).replace(/\s+/g, " ").trim();
     const used = ((reason === "time" ? secs * 1000 : (lastWordAt || Date.now()) - start) / 1000);
     const n = words(answerText);
@@ -980,6 +1047,22 @@ Requirements:
   els.tapSpeak.addEventListener("click", () => { if (speakWait) pressSpeak(); else micOnFromGesture(); });
   els.done.addEventListener("click", () => { if (finishNow) finishNow("done"); });
   els.skipPrep.addEventListener("click", () => { if (repeatNow) repeatNow(); });
+  els.typeInstead.addEventListener("click", () => {
+    hideVoiceHelp();
+    try { synth && synth.cancel(); } catch {}
+    try { tts && tts.stop(); } catch {}
+    if (speakWait) speakWait("type");
+  });
+  els.copyLink.addEventListener("click", () => {
+    const url = els.helpUrl.textContent.trim();
+    const select = () => { try { const r = document.createRange(); r.selectNodeContents(els.helpUrl); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); } catch {} };
+    try {
+      navigator.clipboard.writeText(url).then(() => { els.copyLink.textContent = "COPIED"; setTimeout(() => (els.copyLink.textContent = "COPY LINK"), 2000); }, select);
+    } catch { select(); }
+  });
+  els.openPerms.addEventListener("click", async () => {
+    try { const perms = await window.claude.use("permissions"); if (perms) await perms.manage(); } catch {}
+  });
   els.form.addEventListener("submit", (ev) => { ev.preventDefault(); if (finishNow) finishNow("done"); });
   els.answer.addEventListener("keydown", (ev) => {
     if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); if (finishNow) finishNow("done"); }
