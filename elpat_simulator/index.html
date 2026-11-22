@@ -35,6 +35,7 @@
   --line: #2a3a48; --accent: #7fa8e0; --accent-ink: #0d141b; --rt: #e0b45c; --live: #ff6b6b; --ok: #7bc47f; --danger: #f2867f;
   color-scheme: dark;
 }
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--sign-black); }
@@ -138,6 +139,16 @@ button { cursor: pointer; }
 .tools .icon-btn { padding: 4px 9px; }
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--live); margin-right: 6px; vertical-align: 1px; }
 
+/* Exam pictures */
+.pics { display: grid; gap: 10px; margin: 10px 0 4px; }
+.pics.two { grid-template-columns: 1fr 1fr; }
+@media (max-width: 560px) { .pics.two { grid-template-columns: 1fr; } }
+.pic { margin: 0; display: grid; gap: 4px; min-width: 0; }
+.pic-box { aspect-ratio: 8 / 5; max-width: 100%; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; background: #dfe7ee; display: grid; place-items: center; }
+.pic-box svg { width: 100%; height: 100%; display: block; }
+.pic figcaption { font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.pic details p { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
+
 @media (prefers-reduced-motion: no-preference) {
   .msg { animation: in .18s ease-out both; }
   @keyframes in { from { transform: translateY(4px); opacity: .6; } to { transform: none; opacity: 1; } }
@@ -200,7 +211,7 @@ button { cursor: pointer; }
           <button class="btn ghost" id="check">Sound check</button>
         </div>
         <ul class="parts" id="check-out" hidden aria-live="polite"></ul>
-        <p class="note" id="mic-note">Each question: the examiner reads it aloud, you get a few seconds to think, then press the red <b>SPEAK</b> button and answer. Recording stops when the time runs out, when you stop talking, or when you press <b>Stop and send</b>.</p>
+        <p class="note" id="mic-note">Parts 1 and 2: read the question or look at the picture, then press the red <b>SPEAK</b> button when you are ready. Parts 3 and 4: the examiner reads aloud, you get a few seconds to think, then press <b>SPEAK</b>. Recording stops when the time runs out, when you stop talking, or when you press <b>Stop and send</b>.</p>
         <div class="warn" id="unavailable" hidden>The examiner needs Claude. Open this page on claude.ai while signed in to your Claude account.</div>
         <div class="warn" id="no-voice" hidden>Voice answers are not available in this view. Open the link in Chrome (Android or computer) to answer by voice. You can still take the exam by typing, with the same timer.</div>
       </div>
@@ -208,8 +219,8 @@ button { cursor: pointer; }
       <div class="card">
         <div class="label">Exam structure</div>
         <ol class="parts">
-          <li><b>P1</b><span>Introduction: your job, background and routine operations.</span></li>
-          <li><b>P2</b><span>Pictures: describe a normal scene, compare an abnormal one, ask the examiner three questions, then discuss.</span></li>
+          <li><b>P1</b><span>Introduction: 3–4 questions. Read each question, press SPEAK when ready, answer.</span></li>
+          <li><b>P2</b><span>Pictures: describe a standard picture for 1 minute, then compare it with a non-standard picture for 1 minute.</span></li>
           <li><b>P3</b><span>Listening: an incident report and a radio exchange, read aloud once. The transcript stays folded.</span></li>
           <li><b>P4</b><span>RT role-play: routine calls, a developing abnormal situation, then an urgent safety conflict.</span></li>
         </ol>
@@ -250,8 +261,7 @@ button { cursor: pointer; }
   const STORE_KEY = "elpat-sim-v2";
   const PARTS = [
     { id: "1",  label: "P1 Intro",       secs: 40 },
-    { id: "2A", label: "P2A Pictures",   secs: 75 },
-    { id: "2B", label: "P2B Discussion", secs: 60 },
+    { id: "2A", label: "P2 Pictures",    secs: 60 },
     { id: "3A", label: "P3A Report",     secs: 60 },
     { id: "3B", label: "P3B Radio",      secs: 60 },
     { id: "4",  label: "P4 RT",          secs: 30 },
@@ -259,8 +269,11 @@ button { cursor: pointer; }
   ];
   const PART_RE = /<<\s*PART\s*=\s*([A-Z0-9]+)\s*>>/gi;
   const TIME_RE = /<<\s*TIME\s*=\s*(\d+)\s*>>/gi;
-  const ANY_TAG = /<<\s*(PART|TIME)\s*=\s*[A-Z0-9]+\s*>>/gi;
-  const SILENCE_MS = 6000;   // auto-finish after this much silence once the candidate has spoken
+  const PIC_RE = /<<\s*PICTURE\s*=\s*([AB])\s*>>/gi;
+  const ANY_TAG = /<<\s*(PART|TIME|PICTURE)\s*=\s*[A-Z0-9]+\s*>>/gi;
+  const SELF_PACED = new Set(["1", "2A"]);   // candidate reads the question and presses SPEAK when ready
+  const PICTURE_SECS = 60;
+  const SILENCE_MS = 8000;   // auto-finish after this much silence once the candidate has spoken
   const GRACE_MS = 1400;     // let the last phrase settle after the window closes
 
   const EXAMINER = `# ROLE & OBJECTIVE
@@ -278,17 +291,19 @@ You are an official, certified ELPAT (English Language Proficiency Aviation Test
 2. ONE STEP AT A TIME. Each reply contains exactly one question or task. Then stop.
 3. Adapt Parts 2, 3 and 4 to the candidate's role and aircraft or unit.
 4. Be professional, neutral and encouraging. Do NOT correct mistakes during the exam; save all corrections for the final report.
-5. Part 2 pictures: give a vivid spoken description of the scene (who, where, weather, equipment, positions) in 4–6 sentences.
+5. Part 2 pictures are SHOWN as drawings, so never describe the scene to the candidate in prose. Write one short instruction sentence, then a fenced code block with the language name scene containing a precise brief for an illustrator: viewpoint, every object and person with position (left/centre/right, foreground/background), colours, markings, weather, time of day, and for Picture B the abnormal detail made clearly visible. 60–110 words. The candidate never reads this brief unless the drawing fails.
 6. Part 3 recordings: put the recording in a fenced code block whose first line is [AUDIO RECORDING 1] or [RADIO EXCHANGE AUDIO 2]. It is played aloud once and the candidate cannot read it. Ask the question AFTER the block.
 7. Part 4 radio calls: ICAO phraseology, one transmission per reply, written as "[ATC]: ..." or "[PILOT]: ...".
 
 # WORKFLOW
 The candidate's role is already confirmed (given below). Start directly with Part 1.
 
-PART 1 – INTRODUCTION (3 questions, one per reply): (1) current role, daily duties, aviation background; (2) why aviation / most challenging part of the job; (3) a light future-oriented or routine operational question. Then thank them and announce Part 2 in the same reply as its first task.
+PART 1 – INTRODUCTION (3 or 4 questions, one per reply; the candidate reads each question on screen): (1) current role, daily duties, aviation background; (2) why aviation / most challenging part of the job; (3) a routine operational question; optionally (4) a light future-oriented question (training, technology, career). Then thank them and give Part 2 Task 1 in the same reply.
 
-PART 2A – PICTURES: Task 1: Picture A, a standard situation; ask them to describe it. Task 2: Picture B, a related non-standard situation; ask them to compare B with A (differences, hazards, risks). Task 3: "Now, ask me 3 relevant operational or safety-related questions about Picture B." Answer their questions briefly in character.
-PART 2B – DISCUSSION: 2–3 broader questions (human factors, CRM, SOPs, weather, communication breakdown), one at a time, with brief follow-ups.
+PART 2 – PICTURES (exactly two tasks, 1 minute each; tag both <<PART=2A>>):
+Task 1: Picture A, a STANDARD situation from the candidate's own operation (for a helicopter pilot e.g. offshore helideck turnaround, hoist training, refuelling at a heliport). Say: "Here is Picture A. You have one minute to describe what you see." Add <<PICTURE=A>>.
+Task 2: Picture B, the SAME setting with a NON-STANDARD situation (e.g. fuel spill, FOD, bird strike damage, hydraulic leak, person in the rotor disc area, smoke). Say: "Here is Picture B. You have one minute to compare it with Picture A: the differences, the hazards and what should be done." Add <<PICTURE=B>>. Picture A is shown again beside it automatically.
+After the comparison answer, thank them and start Part 3 in the same reply.
 
 PART 3A – A 120–150 word narrative incident report as [AUDIO RECORDING 1]. Ask the candidate to summarise the key facts, identify the main problem, and answer 2 detail questions (ask the detail questions in the next reply).
 PART 3B – A multi-turn Pilot/ATC radio exchange about an abnormal or emergency situation as [RADIO EXCHANGE AUDIO 2]. Ask: the exact nature of the situation, then the intentions/requests stated and instructions given.
@@ -298,14 +313,15 @@ PART 4 – RT ROLE-PLAY: Brief the scenario (callsign, position/level, weather, 
 FINAL REPORT (in Uzbek, Markdown allowed here). The report is about SPEAKING:
 1. Umumiy taxminiy ICAO darajasi (1–6) and a table of the 6 criteria with a level and a one-line reason each: Pronunciation (from speech-to-text evidence), Structure, Vocabulary, Fluency (use the wpm, first-word delays, timeouts and silences), Comprehension, Interactions (including RT phraseology and readbacks). The overall level is the LOWEST criterion, per ICAO rules.
 2. Nutq ko'rsatkichlari: average wpm, average delay before speaking, number of silent or cut-off answers.
-3. 1-qismdan 4-qismgacha tahlil: what went well and what was missed in each part.
+3. 1-qismdan 4-qismgacha tahlil (2-qism: rasmni tasvirlash va solishtirish): what went well and what was missed in each part.
 4. Xatolar tahlili: a table with columns ❌ Nomzod varianti | ✅ To'g'ri variant (Aviation English / ICAO) | 💡 Izoh. Quote the candidate's exact words.
 5. Tavsiyalar: specific speaking practice before the real exam.
 
 # TAGS (MANDATORY, NEVER READ ALOUD)
 End EVERY reply with tags on their own last line:
-- <<PART=X>> where X is 1, 2A, 2B, 3A, 3B, 4, or REPORT for the reply containing the final report.
-- <<TIME=N>> the speaking window in seconds that fits your question: 30–45 for Part 1 and short follow-ups, 60–90 for picture description and comparison, 45–60 for asking the 3 questions, 45–75 for Part 3 answers, 20–40 for one RT transmission. Omit TIME on the report.`;
+- <<PART=X>> where X is 1, 2A, 3A, 3B, 4, or REPORT for the reply containing the final report.
+- <<TIME=N>> the speaking window in seconds: 40–50 for Part 1, 60 for each picture task, 45–75 for Part 3 answers, 20–40 for one RT transmission. Omit TIME on the report.
+- <<PICTURE=A>> or <<PICTURE=B>> on the two Part 2 replies only.`;
 
   const $ = (id) => document.getElementById(id);
   const els = {
@@ -319,7 +335,7 @@ End EVERY reply with tags on their own last line:
     check: $("check"), checkOut: $("check-out"),
   };
 
-  const fresh = () => ({ role: null, unit: "", prep: 5, pace: 1, messages: [], part: null, startedAt: null, finished: false });
+  const fresh = () => ({ role: null, unit: "", prep: 5, pace: 1, messages: [], part: null, startedAt: null, finished: false, pictures: {}, briefs: {} });
   let state = fresh();
   let sample = null, dictation = null, downloads = null, tts = null;
   let capsReady = 0;
@@ -343,6 +359,10 @@ End EVERY reply with tags on their own last line:
     wrap.innerHTML = html;
     wrap.querySelectorAll("table").forEach((t) => { const d = document.createElement("div"); d.className = "tbl"; t.replaceWith(d); d.appendChild(t); });
     wrap.querySelectorAll("pre").forEach((p) => {
+      const code = p.querySelector("code");
+      if (code && /language-scene/.test(code.className)) {
+        const slot = document.createElement("div"); slot.className = "pic-slot"; p.replaceWith(slot); return;
+      }
       if (!isAudioBlock(p.textContent)) return;
       const d = document.createElement("details");
       const s = document.createElement("summary");
@@ -353,6 +373,7 @@ End EVERY reply with tags on their own last line:
     return wrap.innerHTML;
   };
   const spoken = (text) => stripTags(text)
+    .replace(/```scene[\s\S]*?```/gi, "")
     .replace(/```[a-z]*\n?/gi, "\n")
     .replace(/^\s*\[(AUDIO RECORDING \d|RADIO EXCHANGE AUDIO \d)\]\s*$/gim, "Recording begins.")
     .replace(/\[(ATC|PILOT|CONTROLLER)\]\s*:/gi, (m, w) => (w.toUpperCase() === "PILOT" ? "Pilot" : "A T C") + ":")
@@ -384,6 +405,58 @@ End EVERY reply with tags on their own last line:
     els.clock.textContent = String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
   }
 
+  function sceneBrief(text) { const m = /```scene\s*([\s\S]*?)```/i.exec(text || ""); return m ? m[1].trim() : ""; }
+
+  function fillPictures(slot, which) {
+    slot.innerHTML = "";
+    slot.className = "pics" + (which.length > 1 ? " two" : "");
+    which.forEach((k) => {
+      const fig = document.createElement("figure");
+      fig.className = "pic";
+      const cap = document.createElement("figcaption");
+      cap.textContent = "Picture " + k + (k === "A" ? " · standard" : " · non-standard");
+      const box = document.createElement("div");
+      box.className = "pic-box";
+      if (state.pictures[k]) box.innerHTML = state.pictures[k];
+      else box.innerHTML = '<span class="typing">Drawing picture ' + k + '…</span>';
+      fig.append(box, cap);
+      if (state.briefs[k]) {
+        const d = document.createElement("details");
+        const sm = document.createElement("summary"); sm.textContent = "Picture unclear? Show scene notes";
+        const pp = document.createElement("p"); pp.textContent = state.briefs[k];
+        d.append(sm, pp); fig.appendChild(d);
+      }
+      slot.appendChild(fig);
+    });
+  }
+
+  // Claude draws the scene as an SVG illustration from the examiner's brief.
+  async function drawPicture(k, brief) {
+    state.briefs[k] = brief;
+    if (state.pictures[k]) return;
+    const prompt = `Draw an aviation scene as ONE self-contained SVG illustration for an English speaking exam (the candidate must describe it aloud).
+Scene brief:
+${brief}
+
+Requirements:
+- Output ONLY the SVG markup, starting with <svg and ending with </svg>. No prose, no code fence.
+- viewBox="0 0 800 500", no width/height attributes, xmlns="http://www.w3.org/2000/svg".
+- Clean flat-vector style, like a technical training illustration: sky/ground backgrounds, recognisable aircraft (draw helicopters with main rotor, tail boom and tail rotor), vehicles, people as simple figures in hi-vis colours, equipment.
+- Make every element in the brief visible and in the stated position; make any abnormal detail obvious (e.g. a dark fuel puddle, smoke, debris, a bird).
+- No text, letters or labels except registration or helideck markings (e.g. "H", aircraft registration).
+- Only basic shapes (rect, circle, ellipse, polygon, path, line, g). No scripts, images, external links, fonts or filters. Keep it under 14000 characters.`;
+    try {
+      const { text } = await sample(prompt, { cache: false, modelTier: "complex" });
+      const m = /<svg[\s\S]*<\/svg>/i.exec(text || "");
+      if (m) {
+        const clean = DOMPurify.sanitize(m[0], { USE_PROFILES: { svg: true } });
+        if (/<svg/i.test(clean)) state.pictures[k] = clean;
+      }
+    } catch {}
+    if (!state.pictures[k]) state.pictures[k] = '<p class="note">The picture could not be drawn. Open the scene notes below and describe the scene from them.</p>';
+    persist();
+  }
+
   function messageEl(role, text) {
     const wrap = document.createElement("div");
     wrap.className = "msg " + (role === "assistant" ? "examiner" : "candidate");
@@ -394,6 +467,15 @@ End EVERY reply with tags on their own last line:
     bubble.className = "bubble";
     if (role === "assistant") {
       bubble.innerHTML = md(text);
+      const which = (lastMatch(PIC_RE, text) || "").toUpperCase();
+      const slot = bubble.querySelector(".pic-slot");
+      if (which && slot) fillPictures(slot, which === "B" ? ["A", "B"] : ["A"]);
+      if (tts || synth) {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "icon-btn"; b.textContent = "LISTEN";
+        b.addEventListener("click", () => { if (!capturing) say(text, runId); });
+        who.appendChild(b);
+      }
     } else {
       const nl = text.indexOf("\n");
       const head = text.startsWith("[") && nl > 0 ? text.slice(1, nl - 1) : "";
@@ -426,6 +508,7 @@ End EVERY reply with tags on their own last line:
     els.tapSpeak.hidden = !opts.tap;
     if (opts.tapLabel && els.tapSpeak.textContent !== opts.tapLabel) els.tapSpeak.textContent = opts.tapLabel;
     els.form.hidden = !opts.typing;
+    els.livebox.hidden = state.finished || (kind !== "speak" && !buf && !partial);
   }
 
   function setMicChip() {
@@ -642,6 +725,17 @@ End EVERY reply with tags on their own last line:
     if (tag === "REPORT") state.finished = true;
     state.messages.push({ role: "assistant", content: text });
     persist();
+    const pic = (lastMatch(PIC_RE, text) || "").toUpperCase();
+    if (pic) {
+      // Picture B is compared with A, so make sure both exist.
+      const need = pic === "B" ? ["A", "B"] : ["A"];
+      const briefFor = (k) => k === pic ? sceneBrief(text)
+        : sceneBrief((state.messages.find((m) => m.role === "assistant" && (lastMatch(PIC_RE, m.content) || "").toUpperCase() === k) || {}).content);
+      need.forEach((k) => { if (!state.briefs[k]) state.briefs[k] = briefFor(k); });
+      renderLog();
+      setPhase("", "Preparing picture…");
+      for (const k of need) { await drawPicture(k, state.briefs[k] || "A standard helicopter operation."); if (id !== runId) return; }
+    }
     renderLog();
     runQuestion(text, id);
   }
@@ -668,6 +762,22 @@ End EVERY reply with tags on their own last line:
   async function runQuestion(text, id) {
     if (state.finished) { finishExam(); return; }
     const typing = () => !dictation;
+    if (SELF_PACED.has(state.part)) {
+      if (typing()) return answerWindow(text, id, 0);
+      const r = await new Promise((resolve) => {
+        speakWait = () => resolve("speak");
+        const step = () => {
+          if (id !== runId) return resolve("abort");
+          if (!dictation) return resolve("speak");
+          const pic = state.part === "2A" && lastMatch(PIC_RE, text);
+          setPhase("prep", pic ? "Look at the picture. Press SPEAK when ready" : "Read the question. Press SPEAK when ready", { tap: true, tapLabel: "Speak" });
+          phaseTimer = setTimeout(step, 250);
+        };
+        step();
+      }).finally(() => { clearTimeout(phaseTimer); speakWait = null; });
+      if (r === "abort") return;
+      return answerWindow(text, id, 0, true);
+    }
     for (;;) {
       setPhase("", "Examiner speaking", { tap: !typing(), tapLabel: "Press to speak" });
       speakWait = () => { pressedEarly = true; };
@@ -719,10 +829,11 @@ End EVERY reply with tags on their own last line:
     speakWait();
   }
 
-  async function answerWindow(text, id, pressDelay) {
+  async function answerWindow(text, id, pressDelay, selfPaced) {
     const part = PARTS.find((p) => p.id === state.part) || PARTS[0];
     const asked = parseInt(lastMatch(TIME_RE, text) || "0", 10);
-    const secs = Math.round(Math.min(150, Math.max(15, (asked || part.secs) * state.pace)));
+    const isPicture = state.part === "2A" && !!lastMatch(PIC_RE, text);
+    const secs = isPicture ? PICTURE_SECS : Math.round(Math.min(150, Math.max(15, (asked || part.secs) * state.pace)));
     let typing = !dictation;
     buf = ""; partial = ""; firstWordAt = 0; lastWordAt = 0;
     els.answer.value = "";
@@ -742,7 +853,7 @@ End EVERY reply with tags on their own last line:
         const left = secs - elapsed;
         if (left <= 0) { reason = "time"; return resolve(); }
         const spokeSomething = typing ? els.answer.value.trim().length > 0 : !!(buf.trim() || partial);
-        if (!typing && spokeSomething && lastWordAt && Date.now() - lastWordAt > SILENCE_MS) { reason = "silence"; return resolve(); }
+        if (!typing && !isPicture && spokeSomething && lastWordAt && Date.now() - lastWordAt > SILENCE_MS) { reason = "silence"; return resolve(); }
         setPhase("speak", typing ? "Type now" : micLive ? "Recording" : "Opening microphone…", {
           count: fmt(left), progress: 100 * (elapsed / secs), done: true, doneLabel: "Stop and send",
           tap: !typing && !micLive && micStatus !== "off" && micStatus !== "listening", tapLabel: "Turn the microphone back on", typing,
@@ -767,7 +878,7 @@ End EVERY reply with tags on their own last line:
     const speakSecs = firstWordAt && lastWordAt > firstWordAt ? (lastWordAt - firstWordAt) / 1000 : 0;
     const wpm = speakSecs > 3 ? Math.round(n / (speakSecs / 60)) : null;
     const delay = firstWordAt ? ((firstWordAt - start) / 1000).toFixed(1) : null;
-    const pressed = pressDelay > 0.5 ? ` · pressed SPEAK ${pressDelay.toFixed(1)} s after thinking time` : "";
+    const pressed = selfPaced ? " · self-paced start" : pressDelay > 0.5 ? ` · pressed SPEAK ${pressDelay.toFixed(1)} s after thinking time` : "";
     const meta = typing
       ? `[Typed answer (voice unavailable) · ${secs} s window · ${n} words${reason === "time" ? " · time ran out" : ""}]`
       : n === 0
@@ -856,7 +967,7 @@ End EVERY reply with tags on their own last line:
     const saved = load();
     if (!saved) return;
     unlockSynth();
-    state = saved;
+    state = Object.assign(fresh(), saved);
     showExam();
     if (state.finished) { finishExam(); return; }
     const last = state.messages[state.messages.length - 1];
