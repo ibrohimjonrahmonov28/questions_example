@@ -164,7 +164,7 @@ button { cursor: pointer; }
         <div class="label">English Language Proficiency · Aviation</div>
         <h1>Speak your answers. The examiner is listening.</h1>
       </div>
-      <p>The examiner reads every question aloud. You get a few seconds to get ready, then the microphone captures your answer until the time runs out. At the end you get an ICAO level estimate (1–6) based on your speaking, and a report in Uzbek with your errors corrected.</p>
+      <p>The examiner reads every question aloud. You get a few seconds to think, then press SPEAK and answer before the time runs out. At the end you get an ICAO level estimate (1–6) based on your speaking, and a report in Uzbek with your errors corrected.</p>
 
       <div class="card">
         <div class="label">Your role</div>
@@ -200,7 +200,7 @@ button { cursor: pointer; }
           <button class="btn ghost" id="check">Sound check</button>
         </div>
         <ul class="parts" id="check-out" hidden aria-live="polite"></ul>
-        <p class="note" id="mic-note">Starting the exam turns on the microphone. It stays on until the report; only what you say during the red <b>SPEAK NOW</b> window is recorded.</p>
+        <p class="note" id="mic-note">Each question: the examiner reads it aloud, you get a few seconds to think, then press the red <b>SPEAK</b> button and answer. Recording stops when the time runs out, when you stop talking, or when you press <b>Stop and send</b>.</p>
         <div class="warn" id="unavailable" hidden>The examiner needs Claude. Open this page on claude.ai while signed in to your Claude account.</div>
         <div class="warn" id="no-voice" hidden>Voice answers are not available in this view. Open the link in Chrome (Android or computer) to answer by voice. You can still take the exam by typing, with the same timer.</div>
       </div>
@@ -231,9 +231,9 @@ button { cursor: pointer; }
       <textarea id="answer" rows="2" placeholder="Type your answer…" aria-label="Your answer"></textarea>
     </form>
     <div class="row">
-      <button type="button" class="btn live" id="tap-speak" hidden>Tap to turn the microphone on</button>
-      <button type="button" class="btn" id="done" hidden>Finish answer</button>
-      <button type="button" class="btn ghost" id="skip-prep" hidden>Start now</button>
+      <button type="button" class="btn live" id="tap-speak" hidden>Speak</button>
+      <button type="button" class="btn" id="done" hidden>Stop and send</button>
+      <button type="button" class="btn ghost" id="skip-prep" hidden>Repeat question</button>
     </div>
     <div class="tools">
       <button type="button" class="icon-btn" id="save" hidden>SAVE REPORT</button>
@@ -268,7 +268,7 @@ You are an official, certified ELPAT (English Language Proficiency Aviation Test
 
 # HOW THIS EXAM RUNS
 - Everything you write is READ ALOUD to the candidate by a text-to-speech voice. Write the way an examiner speaks: short, natural sentences, no bullet lists, no headings, no emoji, minimal Markdown. Keep each reply under about 120 words, except the Part 3 recordings and the final report.
-- The candidate answers BY VOICE under time pressure: about 5 seconds to think, then a fixed speaking window. Their answers reach you as automatic speech-to-text transcripts, each preceded by a line in square brackets with measurements: window length, words, speaking rate (wpm), delay before the first word, and whether time ran out.
+- The candidate answers BY VOICE under time pressure: about 5 seconds to think, then they press SPEAK and talk within a fixed window. A late press is reported. Their answers reach you as automatic speech-to-text transcripts, each preceded by a line in square brackets with measurements: window length, words, speaking rate (wpm), delay before the first word, and whether time ran out.
 - Speech-to-text drops most fillers and may mis-hear words. Treat an odd or wrong word that sounds like a plausible intended word as possible pronunciation trouble, and note it as such.
 - "[No response]" means the candidate stayed silent for the whole window. Move on as a real examiner would, and record it.
 - If the candidate asks you to repeat ("say again", "could you repeat"), repeat or rephrase the question.
@@ -421,8 +421,10 @@ End EVERY reply with tags on their own last line:
     els.bar.style.width = (opts.progress || 0) + "%";
     els.deck.classList.toggle("answering", kind === "speak");
     els.done.hidden = !opts.done;
-    els.skipPrep.hidden = !opts.skip;
+    if (opts.doneLabel) els.done.textContent = opts.doneLabel;
+    els.skipPrep.hidden = !opts.repeat;
     els.tapSpeak.hidden = !opts.tap;
+    if (opts.tapLabel && els.tapSpeak.textContent !== opts.tapLabel) els.tapSpeak.textContent = opts.tapLabel;
     els.form.hidden = !opts.typing;
   }
 
@@ -458,8 +460,6 @@ End EVERY reply with tags on their own last line:
       if (st === "listening") micStatus = "listening";
       else if (st === "idle" && reason && reason !== "stopped") micStatus = reason;
       setMicChip();
-      if (!micLive && capturing && dictation) els.tapSpeak.hidden = false;
-      if (micLive) els.tapSpeak.hidden = true;
     });
   }
 
@@ -502,7 +502,7 @@ End EVERY reply with tags on their own last line:
         const piece = parts[i++];
         const u = new SpeechSynthesisUtterance(piece);
         if (voice) { u.voice = voice; u.lang = voice.lang; } else u.lang = "en-GB";
-        u.rate = 0.97;
+        u.rate = 0.9;
         let fin = false;
         const t0 = Date.now();
         const done = (ok) => {
@@ -524,21 +524,25 @@ End EVERY reply with tags on their own last line:
 
   // Returns "browser" | "claude" | false. Browser voice first (works beside the open mic); Claude's voice
   // needs the mic closed, so after it the candidate taps once to answer.
-  let browserVoiceBroken = false;
+  let browserVoiceBroken = false, claudeVoiceBroken = false;
   async function say(text, id) {
     const t = spoken(text);
     if (!t) return "browser";
+    if (tts && !claudeVoiceBroken) {
+      if (micLive && dictation) await dictation.stop().catch(() => {});
+      try { await tts.speak(chunk(t, 1800).slice(0, 100).map((x) => ({ text: x })), { language: "en", rate: 0.9 }); return "claude"; }
+      catch (e) {
+        if (e && e.code === "stopped") return "claude";
+        if (e && (e.code === "not_granted" || e.code === "unavailable" || e.code === "no_gesture")) claudeVoiceBroken = e.code !== "no_gesture";
+      }
+      if (id !== runId) return false;
+    }
     if (synth && !browserVoiceBroken) {
       for (let i = 0; i < 15 && !voice && !synth.getVoices().length; i++) await sleep(100);
       if (!voice) pickVoice();
       if (await sayBrowser(t, id)) return "browser";
       if (id !== runId) return false;
       browserVoiceBroken = true;
-    }
-    if (tts) {
-      if (micLive && dictation) await dictation.stop().catch(() => {});
-      try { await tts.speak(chunk(t, 1800).slice(0, 100).map((x) => ({ text: x })), { language: "en" }); return "claude"; }
-      catch (e) { if (e && e.code === "stopped") return "claude"; }
     }
     return false;
   }
@@ -642,69 +646,83 @@ End EVERY reply with tags on their own last line:
     runQuestion(text, id);
   }
 
-  async function runQuestion(text, id) {
-    if (state.finished) { finishExam(); return; }
-    setPhase("", "Examiner speaking", { count: "" });
-    const how = await say(text, id);
-    if (id !== runId) return;
-    if (!how) {
-      showVoiceWarning();
-      const readSecs = Math.min(40, Math.max(5, words(spoken(text)) / 3.5));
-      const r0 = Date.now();
-      await new Promise((resolve) => {
-        skipPrep = resolve;
-        const step = () => {
-          if (id !== runId) return resolve();
-          const left = readSecs - (Date.now() - r0) / 1000;
-          if (left <= 0) return resolve();
-          setPhase("prep", "Read the question", { count: String(Math.ceil(left)), progress: 100 * (1 - left / readSecs), skip: true });
-          phaseTimer = setTimeout(step, 100);
-        };
-        step();
-      });
-      clearTimeout(phaseTimer); skipPrep = null;
-      if (id !== runId) return;
-    }
+  // Sequence per question: examiner reads it aloud -> thinking countdown -> candidate presses SPEAK -> timed answer.
+  let speakWait = null, repeatNow = null, finishNow = null;
 
-    // Thinking time
-    const prep = state.prep;
+  function countdown(id, secs, label, opts) {
     const t0 = Date.now();
-    await new Promise((resolve) => {
-      skipPrep = resolve;
+    return new Promise((resolve) => {
+      speakWait = () => resolve("speak");
+      repeatNow = () => resolve("repeat");
       const step = () => {
-        if (id !== runId) return resolve();
-        const left = prep - (Date.now() - t0) / 1000;
-        if (left <= 0) return resolve();
-        setPhase("prep", "Get ready", { count: String(Math.ceil(left)), progress: 100 * (1 - left / prep), skip: true });
+        if (id !== runId) return resolve("abort");
+        const left = secs - (Date.now() - t0) / 1000;
+        if (left <= 0) return resolve("done");
+        setPhase("prep", label, Object.assign({ count: String(Math.ceil(left)), progress: 100 * (1 - left / secs) }, opts));
         phaseTimer = setTimeout(step, 100);
       };
       step();
-    });
-    clearTimeout(phaseTimer);
-    skipPrep = null;
-    if (id !== runId) return;
-
-    await answerWindow(text, id);
+    }).finally(() => { clearTimeout(phaseTimer); speakWait = null; repeatNow = null; });
   }
-  let skipPrep = null;
-  let finishNow = null;
 
-  async function answerWindow(text, id) {
+  async function runQuestion(text, id) {
+    if (state.finished) { finishExam(); return; }
+    const typing = () => !dictation;
+    for (;;) {
+      setPhase("", "Examiner speaking", { tap: !typing(), tapLabel: "Press to speak" });
+      speakWait = () => { pressedEarly = true; };
+      let pressedEarly = false;
+      const how = await say(text, id);
+      speakWait = null;
+      if (id !== runId) return;
+      if (pressedEarly) return answerWindow(text, id, 0);
+      if (!how) {
+        showVoiceWarning();
+        const readSecs = Math.min(40, Math.max(5, words(spoken(text)) / 3.5));
+        const r = await countdown(id, readSecs, "Read the question", { tap: !typing(), tapLabel: "Press to speak" });
+        if (r === "abort") return;
+        if (r === "speak") return answerWindow(text, id, 0);
+      }
+      // Thinking time
+      const r = await countdown(id, state.prep, "Think", { tap: !typing(), tapLabel: "Press to speak", repeat: true });
+      if (r === "abort") return;
+      if (r === "repeat") continue;
+      if (r === "speak") return answerWindow(text, id, 0);
+      break;
+    }
+    if (typing()) return answerWindow(text, id, 0);
+
+    // Wait for the SPEAK press; the delay is measured and reported.
+    const w0 = Date.now();
+    const r = await new Promise((resolve) => {
+      speakWait = () => resolve("speak");
+      repeatNow = () => resolve("repeat");
+      const step = () => {
+        if (id !== runId) return resolve("abort");
+        if (!dictation) return resolve("speak");
+        setPhase("speak", "Press SPEAK", { count: "+" + Math.floor((Date.now() - w0) / 1000) + "s", tap: true, tapLabel: "Speak", repeat: true });
+        phaseTimer = setTimeout(step, 200);
+      };
+      step();
+    }).finally(() => { clearTimeout(phaseTimer); speakWait = null; repeatNow = null; });
+    if (r === "abort") return;
+    if (r === "repeat") return runQuestion(text, id);
+    return answerWindow(text, id, (Date.now() - w0) / 1000);
+  }
+
+  // Called synchronously from the SPEAK button's click: the microphone may only open from a tap.
+  function pressSpeak() {
+    if (!speakWait) return;
+    micOnFromGesture();
+    try { synth && synth.cancel(); } catch {}
+    try { tts && tts.stop(); } catch {}
+    speakWait();
+  }
+
+  async function answerWindow(text, id, pressDelay) {
     const part = PARTS.find((p) => p.id === state.part) || PARTS[0];
     const asked = parseInt(lastMatch(TIME_RE, text) || "0", 10);
     const secs = Math.round(Math.min(150, Math.max(15, (asked || part.secs) * state.pace)));
-    if (dictation && !micLive) {
-      await new Promise((resolve) => {
-        const step = () => {
-          if (id !== runId || !dictation || micLive) return resolve();
-          setPhase("prep", micStatus === "off" || micStatus === "stopped" ? "Tap to answer" : "Microphone is off", { tap: true, count: "" });
-          phaseTimer = setTimeout(step, 200);
-        };
-        step();
-      });
-      clearTimeout(phaseTimer);
-      if (id !== runId) return;
-    }
     let typing = !dictation;
     buf = ""; partial = ""; firstWordAt = 0; lastWordAt = 0;
     els.answer.value = "";
@@ -716,6 +734,7 @@ End EVERY reply with tags on their own last line:
 
     await new Promise((resolve) => {
       finishNow = (r) => { reason = r; resolve(); };
+      speakWait = () => {};   // a tap on the mic button while answering only reopens the microphone
       const step = () => {
         if (id !== runId) return resolve();
         typing = !dictation;
@@ -724,20 +743,23 @@ End EVERY reply with tags on their own last line:
         if (left <= 0) { reason = "time"; return resolve(); }
         const spokeSomething = typing ? els.answer.value.trim().length > 0 : !!(buf.trim() || partial);
         if (!typing && spokeSomething && lastWordAt && Date.now() - lastWordAt > SILENCE_MS) { reason = "silence"; return resolve(); }
-        setPhase("speak", typing ? "Type now" : "Speak now", {
-          count: fmt(left), progress: 100 * (elapsed / secs), done: spokeSomething,
-          tap: !typing && !micLive, typing,
+        setPhase("speak", typing ? "Type now" : micLive ? "Recording" : "Opening microphone…", {
+          count: fmt(left), progress: 100 * (elapsed / secs), done: true, doneLabel: "Stop and send",
+          tap: !typing && !micLive && micStatus !== "off" && micStatus !== "listening", tapLabel: "Turn the microphone back on", typing,
         });
         phaseTimer = setTimeout(step, 200);
       };
       step();
     });
     clearTimeout(phaseTimer);
-    finishNow = null;
+    finishNow = null; speakWait = null;
     if (id !== runId) { capturing = false; return; }
 
     setPhase("", "Saving answer…");
-    if (!typing) await sleep(GRACE_MS);
+    if (!typing && dictation) {
+      // stop() resolves once the last words have arrived.
+      await Promise.race([dictation.stop().catch(() => {}), sleep(4000)]);
+    }
     capturing = false;
     const answerText = (typing ? els.answer.value : (buf + (partial ? " " + partial : ""))).replace(/\s+/g, " ").trim();
     const used = ((reason === "time" ? secs * 1000 : (lastWordAt || Date.now()) - start) / 1000);
@@ -745,11 +767,12 @@ End EVERY reply with tags on their own last line:
     const speakSecs = firstWordAt && lastWordAt > firstWordAt ? (lastWordAt - firstWordAt) / 1000 : 0;
     const wpm = speakSecs > 3 ? Math.round(n / (speakSecs / 60)) : null;
     const delay = firstWordAt ? ((firstWordAt - start) / 1000).toFixed(1) : null;
+    const pressed = pressDelay > 0.5 ? ` · pressed SPEAK ${pressDelay.toFixed(1)} s after thinking time` : "";
     const meta = typing
       ? `[Typed answer (voice unavailable) · ${secs} s window · ${n} words${reason === "time" ? " · time ran out" : ""}]`
       : n === 0
-        ? `[No response · ${secs} s window]`
-        : `[Spoken answer · ${secs} s window · ${n} words${wpm ? " · " + wpm + " wpm" : ""}${delay ? " · first word after " + delay + " s" : ""}${reason === "time" ? " · time ran out" : reason === "silence" ? " · stopped speaking" : " · finished early at " + Math.round(used) + " s"}]`;
+        ? `[No response · ${secs} s window${pressed}]`
+        : `[Spoken answer · ${secs} s window · ${n} words${wpm ? " · " + wpm + " wpm" : ""}${delay ? " · first word after " + delay + " s" : ""}${pressed}${reason === "time" ? " · time ran out" : reason === "silence" ? " · stopped speaking" : " · finished at " + Math.round(used) + " s"}]`;
     buf = ""; partial = ""; renderLive();
     state.messages.push({ role: "user", content: meta + "\n" + (answerText || "(silence)") });
     persist();
@@ -816,7 +839,6 @@ End EVERY reply with tags on their own last line:
   els.start.addEventListener("click", () => {
     if (!state.role) return;
     if (!sample) { els.unavailable.hidden = false; return; }
-    micOnFromGesture();      // synchronous, inside the click
     unlockSynth();
     state.unit = els.unit.value.trim().slice(0, 80);
     state.prep = parseInt(els.prep.value, 10) || 5;
@@ -833,7 +855,6 @@ End EVERY reply with tags on their own last line:
   els.resume.addEventListener("click", () => {
     const saved = load();
     if (!saved) return;
-    micOnFromGesture();
     unlockSynth();
     state = saved;
     showExam();
@@ -843,11 +864,9 @@ End EVERY reply with tags on their own last line:
     else if (last) runQuestion(last.content, ++runId);
   });
 
-  els.tapSpeak.addEventListener("click", () => { micOnFromGesture(); });
+  els.tapSpeak.addEventListener("click", () => { if (speakWait) pressSpeak(); else micOnFromGesture(); });
   els.done.addEventListener("click", () => { if (finishNow) finishNow("done"); });
-  els.skipPrep.addEventListener("click", () => {
-    if (skipPrep) { micOnFromGesture(); skipPrep(); }
-  });
+  els.skipPrep.addEventListener("click", () => { if (repeatNow) repeatNow(); });
   els.form.addEventListener("submit", (ev) => { ev.preventDefault(); if (finishNow) finishNow("done"); });
   els.answer.addEventListener("keydown", (ev) => {
     if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); if (finishNow) finishNow("done"); }
