@@ -667,6 +667,7 @@ h2.sec { font-family: var(--font-sign); font-size: 22px; letter-spacing: .03em; 
     let stream = null, mr = null, chunks = [], t0 = 0, ac = null, src = null, levelT = null, vad = { first: 0, last: 0 }, mime = "";
     const pickMime = () => { if (typeof MediaRecorder === "undefined") return ""; for (const m of MIMES) { try { if (MediaRecorder.isTypeSupported(m)) return m; } catch {} } return ""; };
     function support() {
+      if (window.ELPAT_DISABLE_RECORDER) return "phone_stt"; // Android app set to phone speech recognition (it needs the mic to itself)
       if (!window.isSecureContext) return "insecure";
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return "no_getusermedia";
       if (typeof MediaRecorder === "undefined") return "no_mediarecorder";
@@ -807,6 +808,7 @@ h2.sec { font-family: var(--font-sign); font-size: 22px; letter-spacing: .03em; 
     no_mediarecorder: "This browser cannot record audio (MediaRecorder is missing). Use Google Chrome on Android or a desktop browser.",
     denied: "Microphone permission was denied. In Chrome tap the icon left of the address → Permissions → Microphone → Allow. On Samsung phones also check Settings → Apps → Chrome → Permissions → Microphone. Then press RECORD again.",
     no_device: "No microphone was found on this device.",
+    phone_stt: "Recording with playback is off because the app uses the phone's speech recognition. Add an OpenAI key in Settings to record answers with playback.",
     busy: "The microphone is being used by another app (a call, voice recorder or assistant). Close it and press RECORD again.",
     aborted: "Recording was interrupted. Press RECORD again.",
   };
@@ -832,11 +834,11 @@ h2.sec { font-family: var(--font-sign); font-size: 22px; letter-spacing: .03em; 
     try { if (navigator.permissions && navigator.permissions.query) perm = (await navigator.permissions.query({ name: "microphone" })).state; } catch {}
     let policy = null; try { const pp = document.permissionsPolicy || document.featurePolicy; if (pp && pp.allowsFeature) policy = pp.allowsFeature("microphone"); } catch {}
     ul.innerHTML = "";
-    row(null, "Page", STANDALONE ? "standalone web app" : window.claude ? "Claude artifact (inside a frame)" : recorder.inFrame() ? "embedded in a frame" : "top-level page");
+    row(null, "Page", window.ELPAT_APP ? "Android app" : STANDALONE ? "standalone web app" : window.claude ? "Claude artifact (inside a frame)" : recorder.inFrame() ? "embedded in a frame" : "top-level page");
     row(!!window.isSecureContext, "Secure context (HTTPS)", window.isSecureContext ? "yes" : "no: recording needs HTTPS");
     row(typeof MediaRecorder !== "undefined" && !!mime, "MediaRecorder", typeof MediaRecorder === "undefined" ? "not supported" : mime ? "supported · " + mime : "supported, default format");
     row(policy !== false && mediaState !== "blocked", "Microphone access for this page", mediaState === "blocked" ? (HELP[mediaErr] || mediaErr) : policy === false ? "blocked by the hosting frame" : perm === "granted" ? "granted" : perm === "denied" ? "denied in browser settings" : "will be asked when you press RECORD");
-    row(!!(stt || dictation), "Speech-to-text", stt ? "server transcription" : dictation ? "Claude dictation (live)" : "not available");
+    row(!!(stt || dictation), "Speech-to-text", stt ? (window.ELPAT_APP ? "OpenAI Whisper" : "server transcription") : dictation ? (window.ELPAT_APP ? "phone speech recognition (live)" : "Claude dictation (live)") : "not available");
     const verdict = mediaUsable() && (stt || dictation) ? "Full recording with playback and transcription" : mediaUsable() ? "Recording with playback (no transcription)" : dictation ? "Transcription only, no audio playback (frame blocks recording)" : "Typing only";
     row(mediaUsable() && !!(stt || dictation), "Result", verdict);
     els.micDiagBox.open = !(mediaUsable() && (stt || dictation));
@@ -879,6 +881,9 @@ h2.sec { font-family: var(--font-sign); font-size: 22px; letter-spacing: .03em; 
       not_granted: "Claude access is off for this page. Allow it in the page's Permissions menu, then press RETRY.",
       rate_limited: "Claude is busy or your usage limit was reached. Wait a moment, then press RETRY.",
       sampling_disabled: "Claude is not available for this account.",
+      no_key: "Add your Anthropic API key in Settings (on the start screen), then press RETRY.",
+      bad_key: "Your Anthropic API key was rejected. Check it in Settings on the start screen, then press RETRY.",
+      refusal: "The examiner declined this request. Press RETRY.",
     };
     const prev = [mode, modeOpts];
     setMode("error");
@@ -1851,6 +1856,7 @@ Return ONLY JSON: {"theme":"short theme","notesA":"2–3 sentences: what is visi
   const saved = load();
   if (saved && saved.cfg && saved.startedAt) { els.btnResume.hidden = false; els.btnResume.textContent = saved.finished ? "Show last report" : "Resume exam"; }
   let capsSeen = 0;
+  if (window.ELPAT_APP) els.wClaude.textContent = "Add your Anthropic API key in Settings to start the exam.";
   const capDone = () => {
     if (++capsSeen < 3) return;
     els.wClaude.hidden = !!sample;

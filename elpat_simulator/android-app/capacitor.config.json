@@ -1,0 +1,8 @@
+{
+  "appId": "uz.aviation.elpat",
+  "appName": "ELPAT Simulator",
+  "webDir": "www",
+  "server": { "androidScheme": "https" },
+  "android": { "backgroundColor": "#090e13", "allowMixedContent": false },
+  "plugins": { "SplashScreen": { "launchShowDuration": 0 } }
+}
