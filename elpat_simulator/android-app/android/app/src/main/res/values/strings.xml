@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ELPAT Simulator</string>
+    <string name="title_activity_main">ELPAT Simulator</string>
+    <string name="package_name">uz.aviation.elpat</string>
+    <string name="custom_url_scheme">uz.aviation.elpat</string>
+</resources>

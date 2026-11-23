@@ -1,0 +1,3 @@
+standalone/staticfiles
+standalone/.env
+**/__pycache__

@@ -1,0 +1,69 @@
+# Builds the ELPAT Simulator Android app (APK) from elpat_simulator/android-app.
+# Download: Actions → "ELPAT Android app" → latest run → Artifacts → ELPAT-Simulator-apk
+name: ELPAT Android app
+
+on:
+  push:
+    paths:
+      - "elpat_simulator/index.html"
+      - "elpat_simulator/pics/**"
+      - "elpat_simulator/android-app/**"
+      - ".github/workflows/elpat-android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: elpat-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: elpat_simulator/android-app
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: elpat_simulator/android-app/package-lock.json
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web assets (exam page + app layer)
+        run: npm run build:web
+
+      - name: Sync Capacitor Android project
+        run: npx cap sync android
+
+      - name: Build APK
+        working-directory: elpat_simulator/android-app/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Name the APK
+        run: |
+          mkdir -p dist
+          cp android/app/build/outputs/apk/debug/app-debug.apk "dist/ELPAT-Simulator-1.0.${GITHUB_RUN_NUMBER}.apk"
+          ls -la dist
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: ELPAT-Simulator-apk
+          path: elpat_simulator/android-app/dist/*.apk
+          if-no-files-found: error
+          retention-days: 30
